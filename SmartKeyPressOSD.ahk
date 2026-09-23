@@ -3,6 +3,7 @@
 
 #Requires AutoHotkey v2.0
 #SingleInstance Force
+#DllLoad "gdiplus.dll"
 
 InstallKeybdHook()
 InstallMouseHook()
@@ -606,8 +607,11 @@ Cleanup(*) {
     }
 
     if GdipToken {
-        DllCall("gdiplus\GdiplusShutdown", "UPtr", GdipToken)
+        ; Keep gdiplus.dll resident until the matching shutdown call.
+        ; Clear the global token first so Cleanup() remains idempotent.
+        token := GdipToken
         GdipToken := 0
+        DllCall("gdiplus\GdiplusShutdown", "UPtr", token)
     }
 }
 
