@@ -1,3 +1,6 @@
+; SmartKeyPressOSD
+; Mouse-button and modifier on-screen display for AutoHotkey v2
+
 #Requires AutoHotkey v2.0
 #SingleInstance Force
 
@@ -14,7 +17,7 @@ OSD_FADE_DURATION := 450   ; ms fade-out duration
 OSD_OFFSET_X      := 20
 OSD_OFFSET_Y      := 80
 
-OSD_MAX_WIDTH     := 320   ; maximum backing-surface width
+OSD_MAX_WIDTH     := 420   ; maximum backing-surface width
 OSD_HEIGHT        := 42
 OSD_PADDING_X     := 5
 OSD_PADDING_Y     := 7
@@ -27,12 +30,13 @@ OSD_BACKGROUND_ARGB := 0x40FFFF00
 
 ; ARGB colours used by GDI+.
 OSD_COLORS := Map(
-    "Ctrl",  0xFFFFA500,  ; orange
-    "Shift", 0xFFFFA500,
-    "Alt",   0xFFFFA500,
-    "LMB",   0xFF0000FF,  ; blue
-    "RMB",   0xFFFF0000,  ; red
-    "+",     0xFF000000   ; black
+    "Ctrl",    0xFFFFA500,  ; orange
+    "Shift",   0xFFFFA500,
+    "Alt",     0xFFFFA500,
+    "LeftM",   0xFF0000FF,  ; blue
+    "MiddleM", 0xFF008000,  ; green
+    "RightM",  0xFFFF0000,  ; red
+    "+",       0xFF000000   ; black
 )
 
 ; =============================================================================
@@ -145,11 +149,12 @@ ReadPhysicalState() {
     parts := []
 
     lmbDown := GetKeyState("LButton", "P")
+    mmbDown := GetKeyState("MButton", "P")
     rmbDown := GetKeyState("RButton", "P")
-    mouseDown := lmbDown || rmbDown
+    mouseDown := lmbDown || mmbDown || rmbDown
 
     ; Do not show modifiers by themselves. They are included only as context for
-    ; an actual mouse press/drag.
+    ; an actual mouse-button press/drag.
     if !mouseDown {
         return {
             text: "",
@@ -169,9 +174,11 @@ ReadPhysicalState() {
     if altDown
         parts.Push("Alt")
     if lmbDown
-        parts.Push("LMB")
+        parts.Push("LeftM")
+    if mmbDown
+        parts.Push("MiddleM")
     if rmbDown
-        parts.Push("RMB")
+        parts.Push("RightM")
 
     return {
         text: JoinParts(parts),
@@ -414,7 +421,7 @@ CacheTextWidths() {
 
     ; These are the only strings the OSD renders. Measure each one once at
     ; startup instead of calling GdipMeasureString whenever modifiers change.
-    for _, text in ["Ctrl", "Shift", "Alt", "LMB", "RMB", "+"]
+    for _, text in ["Ctrl", "Shift", "Alt", "LeftM", "MiddleM", "RightM", "+"]
         OSDTextWidths[text] := MeasureTextWidth(text)
 }
 

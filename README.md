@@ -4,14 +4,15 @@
 
 A lightweight AutoHotkey v2 on-screen display for mouse clicks and modifier-assisted mouse actions.
 
-The OSD follows the mouse pointer while a mouse button is held, displays the current mouse button and any accompanying `Ctrl`, `Shift`, or `Alt` modifiers, stays visible briefly after release, then fades out smoothly.
+The OSD follows the mouse pointer while a mouse button is held, displays the current left, middle, or right mouse button and any accompanying `Ctrl`, `Shift`, or `Alt` modifiers, stays visible briefly after release, then fades out smoothly.
 
 ## Features
 
 - AutoHotkey **v2.0**
 - Shows:
-  - `LMB` in blue
-  - `RMB` in red
+  - `LeftM` in blue
+  - `MiddleM` in green
+  - `RightM` in red
   - `Ctrl`, `Shift`, and `Alt` in orange
   - separators and other text in black
 - Modifiers are shown **only when a mouse button is also pressed**
@@ -53,17 +54,19 @@ shell:startup
 
 ## Behaviour
 
-The OSD appears only when the left or right mouse button is physically held.
+The OSD appears only when the left, middle, or right mouse button is physically held.
 
 Examples:
 
 | Input | OSD |
 |---|---|
-| Left click | `LMB` |
-| Right click | `RMB` |
-| Ctrl + left click | `Ctrl+LMB` |
-| Shift + right click | `Shift+RMB` |
-| Ctrl + Shift + left click | `Ctrl+Shift+LMB` |
+| Left click | `LeftM` |
+| Middle click | `MiddleM` |
+| Right click | `RightM` |
+| Ctrl + left click | `Ctrl+LeftM` |
+| Shift + middle click | `Shift+MiddleM` |
+| Shift + right click | `Shift+RightM` |
+| Ctrl + Shift + left click | `Ctrl+Shift+LeftM` |
 | Ctrl while typing | No OSD |
 | Shift while typing | No OSD |
 | Alt while typing | No OSD |
@@ -84,8 +87,9 @@ The current defaults are:
 | Font size | `19 px` |
 | Background | Yellow |
 | Background opacity | ~25% |
-| LMB colour | Blue |
-| RMB colour | Red |
+| Left mouse colour | Blue |
+| Middle mouse colour | Green |
+| Right mouse colour | Red |
 | Modifier colour | Orange |
 | Separator colour | Black |
 | Hold time | `700 ms` |
@@ -150,12 +154,13 @@ For the default value:
 
 ```ahk
 OSD_COLORS := Map(
-    "Ctrl",  0xFFFFA500,
-    "Shift", 0xFFFFA500,
-    "Alt",   0xFFFFA500,
-    "LMB",   0xFF0000FF,
-    "RMB",   0xFFFF0000,
-    "+",     0xFF000000
+    "Ctrl",    0xFFFFA500,
+    "Shift",   0xFFFFA500,
+    "Alt",     0xFFFFA500,
+    "LeftM",   0xFF0000FF,
+    "MiddleM", 0xFF008000,
+    "RightM",  0xFFFF0000,
+    "+",       0xFF000000
 )
 ```
 
@@ -194,8 +199,8 @@ The GUI uses extended window styles that prevent it from taking focus or interce
 ## Notes
 
 - The OSD is intentionally tied to mouse-button activity. Modifier keys alone are ignored.
-- The script monitors the physical state of the left and right mouse buttons.
-- The maximum backing-surface width is currently `320 px`. The visible OSD width is calculated dynamically from the rendered text.
+- The script monitors the physical state of the left, middle, and right mouse buttons.
+- The maximum backing-surface width is currently `420 px`. The visible OSD width is calculated dynamically from the rendered text.
 - The OSD is intended for visual feedback during demonstrations, presentations, screen recordings, training sessions, and similar workflows.
 
 ## Licence

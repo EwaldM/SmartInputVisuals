@@ -1,8 +1,8 @@
-# Creative Commons Attribution 4.0 International
+# SmartKeyPressOSD — Creative Commons Attribution 4.0 International
 
 SPDX-License-Identifier: CC-BY-4.0
 
-This project is licensed under the **Creative Commons Attribution 4.0 International licence (CC BY 4.0)**.
+SmartKeyPressOSD is licensed under the **Creative Commons Attribution 4.0 International licence (CC BY 4.0)**.
 
 You are free to:
 
