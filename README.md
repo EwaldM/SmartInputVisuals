@@ -2,7 +2,7 @@
 
 [![Licence: CC BY 4.0](https://img.shields.io/badge/Licence-CC_BY_4.0-lightgrey.svg)](https://creativecommons.org/licenses/by/4.0/)
 
-SmartKeyPressOSD is a small AutoHotkey v2 host for optional, same-process mouse visualisation plugins. The host samples input once, maintains a reusable shared state object, owns the GDI+ lifetime, and dispatches input events to the enabled plugins.
+SmartKeyPressOSD is a small AutoHotkey v2 host for optional, same-process mouse visualisation plugins. The host samples input once, maintains a reusable shared state object, owns the GDI+ lifetime, evaluates optional application scope centrally, and dispatches events only to enabled, in-scope plugins.
 
 The original text OSD is now itself a plugin, so all visual features are optional and follow the same architecture.
 
@@ -32,6 +32,7 @@ SmartKeyPressOSD/
 |   |-- SharedTheme.ahk
 |   |-- GDIPlusHost.ahk
 |   |-- InputState.ahk
+|   |-- AppScope.ahk
 |   `-- PluginManager.ahk
 `-- Plugins/
     |-- KeyPressOSD.ahk
@@ -46,12 +47,15 @@ SmartKeyPressOSD/
 1. starts GDI+ once;
 2. runs one application timer;
 3. updates one persistent `SmartInputState` object;
-4. dispatches that state to plugins;
-5. shuts plugins down before shutting GDI+ down.
+4. evaluates the configured foreground/hover application scope;
+5. dispatches that state only to enabled, in-scope plugins;
+6. shuts plugins down before shutting GDI+ down.
 
 `Core/InputState.ahk` contains the reusable input state object.
 
-`Core/PluginManager.ahk` detects button transitions centrally and dispatches plugin callbacks.
+`Core/AppScope.ahk` resolves foreground and hovered applications and applies the configured application filter.
+
+`Core/PluginManager.ahk` detects button transitions centrally and dispatches callbacks only to enabled, in-scope plugins.
 
 `Core/SharedTheme.ahk` contains colours shared by every plugin.
 
@@ -94,6 +98,62 @@ Colours use ARGB format:
 0xAARRGGBB
 ```
 
+## Application scope
+
+Application filtering is configured centrally in `Core/AppScope.ahk`. Changes to this file take effect after reloading or restarting SmartKeyPressOSD.
+
+By default it is disabled, so all plugins behave exactly as before:
+
+```ahk
+class SmartAppScope {
+	static Enabled := false
+	static Mode := "FocusOrHover"
+	static Applications := []
+}
+```
+
+To restrict visualisations to selected applications, enable the filter and list their executable names:
+
+```ahk
+class SmartAppScope {
+	static Enabled := true
+	static Mode := "FocusOrHover"
+	static Applications := [
+		"devenv.exe",
+		"msedge.exe"
+	]
+}
+```
+
+Supported modes are:
+
+| Mode | Behaviour |
+|---|---|
+| `Always` | Always allowed, regardless of the configured application list |
+| `FocusOnly` | Allowed when a configured application has keyboard focus |
+| `HoverOnly` | Allowed when the pointer is over a configured application |
+| `FocusOrHover` | Allowed when either condition is true |
+| `FocusAndHover` | Allowed only when both conditions are true |
+
+Executable-name matching is case-insensitive.
+
+The foreground and hovered process names are cached and are resolved again only when the corresponding window handle changes. When SmartKeyPressOSD's own topmost layered windows are encountered under the pointer, the scope resolver looks beneath them for the external application window.
+
+### Per-plugin scope override
+
+Plugins can define a `ScopeMode` override. An empty value inherits `SmartAppScope.Mode`.
+
+The included `PointerHalo` plugin defaults to `HoverOnly`, so the halo disappears as soon as the pointer leaves a configured application, even if that application remains focused. For example:
+
+```ahk
+class PointerHaloPlugin {
+	static Enabled := true
+	static ScopeMode := "HoverOnly"
+}
+```
+
+Application filtering still uses the same global `SmartAppScope.Applications` list. `KeyPressOSD` and `ClickRipples` currently inherit the global mode with `ScopeMode := ""`.
+
 ## KeyPressOSD plugin
 
 `Plugins/KeyPressOSD.ahk` contains the original text OSD functionality.
@@ -102,7 +162,7 @@ Examples:
 
 | Input | Display |
 |---|---|
-| Left click | No text OSD entry by default |
+| Left click | No text OSD |
 | Middle click | `MiddleM` |
 | Right click | `RightM` |
 | Ctrl + left click | `Ctrl+LeftM` |
@@ -112,6 +172,8 @@ Examples:
 | Ctrl while typing | No text OSD |
 | Shift while typing | No text OSD |
 | Alt while typing | No text OSD |
+
+A plain left click is intentionally suppressed. When the left button is combined with a modifier or another mouse button, the full combination is shown, including `LeftM`.
 
 The plugin follows the pointer during a drag, keeps the final text visible for a short period after release, then fades it out.
 
@@ -141,6 +203,7 @@ Default configuration:
 
 ```ahk
 static Enabled := true
+static ScopeMode := "HoverOnly"
 static Diameter := 65
 static StrokeWidth := 3.0
 static NeutralColor := 0x80FFFF00
@@ -158,6 +221,7 @@ Default configuration:
 
 ```ahk
 static Enabled := true
+static ScopeMode := ""
 static Lifetime := 650
 static MaxRadius := 52
 static MinRadius := 7
@@ -195,6 +259,7 @@ WantsTick(state)
 Tick(state)
 MouseDown(button, state)
 MouseUp(button, state)
+ScopeLost()
 Shutdown()
 ```
 
@@ -206,7 +271,9 @@ PluginManager.Register(MyPlugin, "MyPlugin")
 
 `WantsTick(state)` is optional. If present and it returns `false`, the manager skips that plugin's `Tick()` call for the current host tick.
 
-This lets animation or OSD plugins become effectively idle when they have nothing to do.
+`ScopeLost()` is optional and is called once when an enabled plugin moves from an allowed application scope to a disallowed one. The included visual plugins use it to hide or clear their current visualisation immediately.
+
+The plugin manager evaluates `Enabled` and application scope **before** calling `WantsTick()`, mouse callbacks, or `Tick()`. A plugin whose `Enabled` property is `false` is not initialised and receives no normal callbacks at all.
 
 ### Shared state object
 
@@ -224,6 +291,13 @@ state.MouseDown
 state.Ctrl
 state.Shift
 state.Alt
+state.HoverHwnd
+state.ActiveHwnd
+state.HoverProcess
+state.ActiveProcess
+state.HoverAllowed
+state.FocusAllowed
+state.ScopeAllowed
 ```
 
 The current plugins only need modifiers while a mouse button is held, so modifier key state is queried only in that situation.
@@ -238,7 +312,7 @@ Other plugins continue running.
 
 The included plugins are enabled by default.
 
-You can disable one either by removing/renaming its file and restarting, or by changing its `Enabled` setting. For example:
+You can disable one either by removing/renaming its file and restarting, or by changing its `Enabled` setting and reloading/restarting. The `PluginManager` checks this setting before `Init()` and before every normal dispatch, so a disabled plugin is skipped by the manager rather than being called and expected to return early. For example:
 
 ```ahk
 class PointerHaloPlugin {
@@ -263,7 +337,7 @@ Plugins do not create their own polling timers.
 
 ### Input is sampled once
 
-Each host tick reads the pointer and mouse buttons exactly once into the persistent `SmartInputState` object. All plugins consume that same state.
+Each host tick reads the pointer, hovered window handle, and mouse buttons exactly once into the persistent `SmartInputState` object. All plugins consume that same state.
 
 No plugin repeats `MouseGetPos()` or physical button polling.
 
@@ -275,13 +349,23 @@ The host does not create new button/modifier Maps on every poll. The same `Smart
 
 The plugin manager detects `MouseDown` and `MouseUp` transitions once and dispatches them to interested plugins. Individual plugins do not maintain duplicate transition detectors.
 
-### Inactive plugins are skipped
+### Disabled, out-of-scope and inactive plugins are skipped
 
-`WantsTick(state)` allows plugins to avoid normal tick processing while idle:
+The manager first checks the plugin's `Enabled` property. Disabled plugins receive no normal callbacks.
+
+When `SmartAppScope.Enabled` is `true`, the manager also checks the configured application scope before dispatching mouse or tick callbacks. An out-of-scope plugin receives only a one-time `ScopeLost()` transition callback if it had previously been in scope.
+
+For plugins which are enabled and in scope, `WantsTick(state)` avoids normal tick processing while idle:
 
 - `KeyPressOSD` is skipped while hidden and no mouse button is down.
 - `ClickRipples` is skipped while there are no active animations.
-- `PointerHalo` receives every tick because it must follow the pointer.
+- `PointerHalo` receives every in-scope tick because it must follow the pointer.
+
+### Application-scope lookup is cached
+
+When application filtering is disabled, the host does not perform foreground/hover process-name lookups.
+
+When it is enabled, process names are resolved only when the foreground or effective hovered window handle changes. The names are then reused on subsequent 20 ms ticks.
 
 ### Rendering is event-driven where possible
 
@@ -320,6 +404,7 @@ A minimal plugin can be written as:
 ```ahk
 class MyPlugin {
     static Enabled := true
+    static ScopeMode := ""
 
     static Init() {
     }
@@ -338,6 +423,9 @@ class MyPlugin {
     }
 
     static MouseUp(button, state) {
+    }
+
+    static ScopeLost() {
     }
 
     static Shutdown() {

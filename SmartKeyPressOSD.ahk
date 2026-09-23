@@ -8,6 +8,7 @@
 #Include Core\SharedTheme.ahk
 #Include Core\GDIPlusHost.ahk
 #Include Core\InputState.ahk
+#Include Core\AppScope.ahk
 #Include Core\PluginManager.ahk
 
 ; Optional same-process plugins. Missing files are ignored at startup.
@@ -23,6 +24,7 @@ CoordMode("Mouse", "Screen")
 APP_POLL_INTERVAL := 20
 AppState := SmartInputState()
 
+SmartAppScope.Init()
 GDIPlusHost.Init()
 OnExit(ShutdownApplication)
 
@@ -35,7 +37,10 @@ AppTick() {
 	; Input is sampled exactly once per application tick.
 	AppState.Update()
 
-	; The same persistent state object is passed to every plugin.
+	; Resolve optional foreground/hover application scope centrally.
+	SmartAppScope.Update(AppState)
+
+	; The same persistent state object is passed to every in-scope plugin.
 	PluginManager.Process(AppState)
 }
 
