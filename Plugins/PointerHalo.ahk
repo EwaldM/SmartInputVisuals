@@ -3,6 +3,7 @@
 
 class PointerHaloPlugin {
 	static Enabled := true
+	static ScopeMode := "HoverOnly" ; halo is shown only over configured applications
 
 	static Diameter := 65
 	static StrokeWidth := 3.0
@@ -34,6 +35,16 @@ class PointerHaloPlugin {
 	static WantsTick(state) {
 		; The halo follows the pointer continuously, so it needs every host tick.
 		return this.Enabled && !!this.Gui
+	}
+
+	static ScopeLost() {
+		if this.Gui && this.Visible
+			DllCall("user32\ShowWindow", "Ptr", this.Gui.Hwnd, "Int", 0)
+
+		this.Visible := false
+		this.CurrentStyle := ""
+		this.LastX := -2147483648
+		this.LastY := -2147483648
 	}
 
 	static Tick(state) {

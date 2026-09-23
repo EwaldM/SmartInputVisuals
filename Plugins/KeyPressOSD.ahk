@@ -3,6 +3,7 @@
 
 class KeyPressOSDPlugin {
 	static Enabled := true
+	static ScopeMode := "" ; empty = inherit SmartAppScope.Mode
 
 	static HoldDelay := 700
 	static FadeDuration := 450
@@ -55,11 +56,23 @@ class KeyPressOSDPlugin {
 		return this.Enabled && (state.MouseDown || this.Visible)
 	}
 
+	static ScopeLost() {
+		this.Hide()
+	}
+
 	static Tick(state) {
 		if !this.Enabled || !this.Gui
 			return
 
 		if state.MouseDown {
+			; A plain left click intentionally produces no text OSD. If a modifier
+			; or another mouse button participates, show the complete combination.
+			if !this.ShouldDisplay(state) {
+				if this.Visible
+					this.Hide()
+				return
+			}
+
 			this.LastActiveTick := A_TickCount
 
 			mask := this.GetDisplayMask(state)
@@ -110,6 +123,10 @@ class KeyPressOSDPlugin {
 		this.Hide()
 	}
 
+	static ShouldDisplay(state) {
+		return state.MiddleM || state.RightM || state.Ctrl || state.Shift || state.Alt
+	}
+
 	static GetDisplayMask(state) {
 		mask := 0
 		if state.Ctrl
@@ -136,9 +153,8 @@ class KeyPressOSDPlugin {
 			parts.Push("Shift")
 		if state.Alt
 			parts.Push("Alt")
-		; Uncomment the following two lines to show LeftM in the text OSD.
-		; if state.LeftM
-		; 	parts.Push("LeftM")
+		if state.LeftM
+			parts.Push("LeftM")
 		if state.MiddleM
 			parts.Push("MiddleM")
 		if state.RightM

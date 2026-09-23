@@ -1,11 +1,16 @@
 ; SmartKeyPressOSD - same-process plugin manager
 ;
+; Plugin configuration:
+;     static Enabled := true
+;     static ScopeMode := ""  ; empty = inherit SmartAppScope.Mode
+;
 ; Optional plugin callbacks:
 ;     Init()
 ;     WantsTick(state) -> true/false
 ;     Tick(state)
 ;     MouseDown(button, state)
 ;     MouseUp(button, state)
+;     ScopeLost()
 ;     Shutdown()
 ;
 ; Plugins register at startup with:
@@ -24,7 +29,8 @@ class PluginManager {
 			Plugin: plugin,
 			Name: name,
 			Enabled: true,
-			Initialised: false
+			Initialised: false,
+			ScopeAllowed: false
 		})
 	}
 
@@ -35,7 +41,9 @@ class PluginManager {
 		this.Initialised := true
 
 		for record in this.Plugins {
-			if !record.Enabled
+			; The manager does not call a plugin at all when its own Enabled flag is
+			; false. This check happens before Init().
+			if !this.IsPluginEnabled(record)
 				continue
 
 			; Mark it initialised before Init() so Disable() can call Shutdown()
@@ -55,37 +63,60 @@ class PluginManager {
 		if !this.Initialised
 			return
 
-		; Transition events are computed once centrally, not by each plugin.
-		if state.LeftM != this.PreviousLeftM {
-			if state.LeftM
-				this.DispatchMouseDown("LeftM", state)
-			else
-				this.DispatchMouseUp("LeftM", state)
-			this.PreviousLeftM := state.LeftM
-		}
+		leftDown := state.LeftM && !this.PreviousLeftM
+		leftUp := !state.LeftM && this.PreviousLeftM
+		middleDown := state.MiddleM && !this.PreviousMiddleM
+		middleUp := !state.MiddleM && this.PreviousMiddleM
+		rightDown := state.RightM && !this.PreviousRightM
+		rightUp := !state.RightM && this.PreviousRightM
 
-		if state.MiddleM != this.PreviousMiddleM {
-			if state.MiddleM
-				this.DispatchMouseDown("MiddleM", state)
-			else
-				this.DispatchMouseUp("MiddleM", state)
-			this.PreviousMiddleM := state.MiddleM
-		}
+		; Transition state is maintained centrally even while every plugin is
+		; disabled or out of scope. Re-entering scope therefore does not replay a
+		; click which happened elsewhere.
+		this.PreviousLeftM := state.LeftM
+		this.PreviousMiddleM := state.MiddleM
+		this.PreviousRightM := state.RightM
 
-		if state.RightM != this.PreviousRightM {
-			if state.RightM
-				this.DispatchMouseDown("RightM", state)
-			else
-				this.DispatchMouseUp("RightM", state)
-			this.PreviousRightM := state.RightM
-		}
-
-		this.DispatchTick(state)
-	}
-
-	static DispatchTick(state) {
 		for record in this.Plugins {
-			if !record.Enabled || !record.Initialised
+			if !record.Initialised || !this.IsPluginEnabled(record)
+				continue
+
+			try {
+				scopeAllowed := SmartAppScope.IsPluginAllowed(record.Plugin, state)
+			} catch Error as err {
+				this.Disable(record, "scope evaluation", err)
+				continue
+			}
+
+			if !scopeAllowed {
+				if record.ScopeAllowed {
+					record.ScopeAllowed := false
+					if HasMethod(record.Plugin, "ScopeLost") {
+						try record.Plugin.ScopeLost()
+						catch Error as err {
+							this.Disable(record, "ScopeLost", err)
+						}
+					}
+				}
+				continue
+			}
+
+			record.ScopeAllowed := true
+
+			if leftDown && !this.CallMouse(record, "MouseDown", "LeftM", state)
+				continue
+			if leftUp && !this.CallMouse(record, "MouseUp", "LeftM", state)
+				continue
+			if middleDown && !this.CallMouse(record, "MouseDown", "MiddleM", state)
+				continue
+			if middleUp && !this.CallMouse(record, "MouseUp", "MiddleM", state)
+				continue
+			if rightDown && !this.CallMouse(record, "MouseDown", "RightM", state)
+				continue
+			if rightUp && !this.CallMouse(record, "MouseUp", "RightM", state)
+				continue
+
+			if !record.Enabled
 				continue
 			if !HasMethod(record.Plugin, "Tick")
 				continue
@@ -103,29 +134,33 @@ class PluginManager {
 		}
 	}
 
-	static DispatchMouseDown(button, state) {
-		for record in this.Plugins {
-			if !record.Enabled || !record.Initialised
-				continue
-			if !HasMethod(record.Plugin, "MouseDown")
-				continue
+	static CallMouse(record, callbackName, button, state) {
+		if !HasMethod(record.Plugin, callbackName)
+			return true
 
-			try record.Plugin.MouseDown(button, state)
-			catch Error as err
-				this.Disable(record, "MouseDown", err)
+		try {
+			if callbackName = "MouseDown"
+				record.Plugin.MouseDown(button, state)
+			else
+				record.Plugin.MouseUp(button, state)
+
+			return true
+		} catch Error as err {
+			this.Disable(record, callbackName, err)
+			return false
 		}
 	}
 
-	static DispatchMouseUp(button, state) {
-		for record in this.Plugins {
-			if !record.Enabled || !record.Initialised
-				continue
-			if !HasMethod(record.Plugin, "MouseUp")
-				continue
+	static IsPluginEnabled(record) {
+		if !record.Enabled
+			return false
 
-			try record.Plugin.MouseUp(button, state)
-			catch Error as err
-				this.Disable(record, "MouseUp", err)
+		; Included plugins expose a static Enabled property. A third-party plugin
+		; without that property is treated as enabled for backwards compatibility.
+		try {
+			return !!record.Plugin.Enabled
+		} catch {
+			return true
 		}
 	}
 
@@ -135,7 +170,9 @@ class PluginManager {
 
 		this.Initialised := false
 
-		; Release plugins in reverse registration order.
+		; Release plugins in reverse registration order. An already-initialised
+		; plugin is shut down even if its Enabled property was changed at runtime,
+		; because allocated resources still need to be released safely.
 		Loop this.Plugins.Length {
 			index := this.Plugins.Length - A_Index + 1
 			record := this.Plugins[index]
@@ -154,6 +191,7 @@ class PluginManager {
 			}
 
 			record.Initialised := false
+			record.ScopeAllowed := false
 		}
 	}
 
@@ -162,6 +200,7 @@ class PluginManager {
 			return
 
 		record.Enabled := false
+		record.ScopeAllowed := false
 
 		OutputDebug(
 			"SmartKeyPressOSD plugin '" record.Name

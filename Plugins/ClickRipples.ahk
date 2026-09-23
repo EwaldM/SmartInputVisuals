@@ -3,6 +3,7 @@
 
 class ClickRipplesPlugin {
 	static Enabled := true
+	static ScopeMode := "" ; empty = inherit SmartAppScope.Mode
 
 	static Lifetime := 650
 	static MaxRadius := 52
@@ -17,6 +18,10 @@ class ClickRipplesPlugin {
 	static WantsTick(state) {
 		; No animation means no Tick calls for this plugin.
 		return this.Enabled && this.Ripples.Length > 0
+	}
+
+	static ScopeLost() {
+		this.ClearRipples()
 	}
 
 	static MouseDown(button, state) {
@@ -58,10 +63,14 @@ class ClickRipplesPlugin {
 		}
 	}
 
-	static Shutdown() {
+	static ClearRipples() {
 		for ripple in this.Ripples
 			ripple.Dispose()
 		this.Ripples := []
+	}
+
+	static Shutdown() {
+		this.ClearRipples()
 	}
 }
 

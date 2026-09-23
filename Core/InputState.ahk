@@ -14,13 +14,23 @@ class SmartInputState {
 	Shift := false
 	Alt := false
 
+	HoverHwnd := 0
+	ActiveHwnd := 0
+	HoverProcess := ""
+	ActiveProcess := ""
+	HoverAllowed := true
+	FocusAllowed := true
+	ScopeAllowed := true
+
 	Update() {
 		mouseX := 0
 		mouseY := 0
-		MouseGetPos(&mouseX, &mouseY)
+		hoverHwnd := 0
+		MouseGetPos(&mouseX, &mouseY, &hoverHwnd)
 
 		this.X := mouseX
 		this.Y := mouseY
+		this.HoverHwnd := hoverHwnd
 
 		this.LeftM := !!GetKeyState("LButton", "P")
 		this.MiddleM := !!GetKeyState("MButton", "P")
