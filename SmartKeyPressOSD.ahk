@@ -11,6 +11,7 @@
 #Include Core\InputState.ahk
 #Include Core\AppScope.ahk
 #Include Core\ProfileManager.ahk
+#Include Core\TrayController.ahk
 #Include Core\PluginManager.ahk
 
 ; Profiles register before plugins are initialised.
@@ -26,6 +27,7 @@
 InstallKeybdHook()
 InstallMouseHook()
 CoordMode("Mouse", "Screen")
+CoordMode("ToolTip", "Screen")
 
 APP_POLL_INTERVAL := 20
 AppState := SmartInputState()
@@ -33,6 +35,7 @@ AppState := SmartInputState()
 SmartInputActivity.Init()
 SmartAppScope.Init()
 SmartProfileManager.Init()
+SmartTrayController.Init()
 GDIPlusHost.Init()
 OnExit(ShutdownApplication)
 
@@ -48,12 +51,14 @@ AppTick() {
 	; disabled, so AppScope resolves process names whenever profiles are enabled.
 	SmartAppScope.Update(AppState, SmartProfileManager.Enabled)
 	SmartProfileManager.Update(AppState)
+	SmartTrayController.Update(AppState)
 	PluginManager.Process(AppState)
 }
 
 ShutdownApplication(*) {
 	SetTimer(AppTick, 0)
 
+	SmartTrayController.Shutdown()
 	PluginManager.Shutdown()
 	SmartInputActivity.Shutdown()
 	GDIPlusHost.Shutdown()

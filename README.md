@@ -37,7 +37,8 @@ SmartKeyPressOSD/
 │  ├─ InputState.ahk
 │  ├─ PluginManager.ahk
 │  ├─ ProfileManager.ahk
-│  └─ SharedTheme.ahk
+│  ├─ SharedTheme.ahk
+│  └─ TrayController.ahk
 ├─ Profiles/
 │  ├─ Default.ahk
 │  └─ AppProfiles.ahk
@@ -98,11 +99,11 @@ static OffsetY := -35
 ```ahk
 static Diameter := 65
 static StrokeWidth := 3.0
-static NeutralColor := 0x80FFFF00
+static NeutralColor := 0xA08B008B
 
 static IdleFadeEnabled := true
-static IdleDelay := 1500
-static IdleFadeDuration := 500
+static IdleDelay := 2500
+static IdleFadeDuration := 900
 ```
 
 After `IdleDelay` milliseconds without pointer movement, the halo fades over `IdleFadeDuration`. Moving the pointer or holding a mouse button restores full visibility immediately.
@@ -223,7 +224,20 @@ class PowerPointProfile {
 
 Plugin names omitted from an application-specific profile fall back to the corresponding setting in the Default profile. Executable names are matched case-insensitively. Duplicate executable mappings are rejected during startup.
 
-When a profile disables an already-visible plugin, the manager sends one `Deactivated("Profile", state)` callback so the plugin can clear its visualisation, then stops dispatching normal callbacks to it.
+### Per-profile DragIndicator toggle
+
+`DragIndicator` has an additional session-only runtime toggle in the tray menu. The toggle is stored separately for each application profile and never overrides the profile configuration itself.
+
+- Right-click the SmartKeyPressOSD tray icon and use `DragIndicator`.
+- The toggle targets the profile of the foreground application, so moving the pointer to the Windows notification area does not switch the toggle context to the Default profile.
+- When that profile permits `DragIndicator`, the menu item is enabled and its check mark shows that profile's runtime state.
+- When that profile disables `DragIndicator`, the menu item is disabled. No status message is shown.
+- An accepted toggle briefly shows `DragIndicator: ON` or `DragIndicator: OFF` near the pointer.
+- Runtime toggle states are kept only for the current SmartKeyPressOSD session and reset when the script restarts.
+
+The tray menu contains only SmartKeyPressOSD-specific controls plus Exit; AutoHotkey's standard `Suspend Hotkeys` and `Pause Script` items are intentionally removed because they do not control plugins.
+
+When a profile disables an already-visible plugin, the manager sends one `Deactivated("Profile", state)` callback so the plugin can clear its visualisation, then stops dispatching normal callbacks to it. If a permitted `DragIndicator` is switched off with the runtime toggle, it receives `Deactivated("RuntimeToggle", state)` and is likewise skipped until that profile's runtime toggle is enabled again.
 
 ## Plugin eligibility and lifecycle
 
@@ -231,12 +245,13 @@ The manager applies eligibility centrally in this order:
 
 1. plugin's own `Enabled` flag
 2. active application profile
-3. application scope
-4. pause-while-typing policy
+3. per-profile runtime toggle
+4. application scope
+5. pause-while-typing policy
 
 A plugin with `Enabled := false` is not initialised and receives no plugin calls at all. Changing `Enabled` in source therefore requires a reload/restart.
 
-For profile, scope or typing transitions, an active plugin may receive one `Deactivated(reason, state)` cleanup callback. Once blocked, it receives no `WantsTick`, `Tick`, `MouseDown` or `MouseUp` calls.
+For profile, runtime-toggle, scope or typing transitions, an active plugin may receive one `Deactivated(reason, state)` cleanup callback. Once blocked, it receives no `WantsTick`, `Tick`, `MouseDown` or `MouseUp` calls.
 
 Optional plugin callbacks are:
 
@@ -291,6 +306,7 @@ The architecture avoids unnecessary work by:
 
 - skipping globally disabled plugins before initialisation and dispatch;
 - skipping plugins disabled by the active profile;
+- skipping plugins disabled by their per-profile runtime toggle;
 - skipping out-of-scope plugins;
 - skipping pause-while-typing plugins while typing is active;
 - calling `WantsTick()` only after all eligibility checks pass;

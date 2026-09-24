@@ -122,8 +122,10 @@ class PluginManager {
 	}
 
 	static GetBlockReason(record, state) {
-		if !SmartProfileManager.IsPluginEnabled(record.Name)
+		if !SmartProfileManager.IsPluginAvailable(record.Name)
 			return "Profile"
+		if !SmartProfileManager.IsPluginRuntimeEnabled(record.Name)
+			return "RuntimeToggle"
 
 		try {
 			if !SmartAppScope.IsPluginAllowed(record.Plugin, state)

@@ -8,11 +8,11 @@ class PointerHaloPlugin {
 
 	static Diameter := 65
 	static StrokeWidth := 3.0
-	static NeutralColor := 0x80FFFF00
+	static NeutralColor := 0xA08B008B
 
 	static IdleFadeEnabled := true
-	static IdleDelay := 1500
-	static IdleFadeDuration := 500
+	static IdleDelay := 2500
+	static IdleFadeDuration := 900
 
 	static Gui := 0
 	static Hdc := 0

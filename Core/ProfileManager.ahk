@@ -7,6 +7,7 @@ class SmartProfileManager {
 
 	static Profiles := []
 	static ProcessProfiles := Map()
+	static RuntimePluginStates := Map()
 	static DefaultProfile := 0
 	static ActiveProfile := 0
 	static ActiveProfileName := ""
@@ -24,11 +25,21 @@ class SmartProfileManager {
 
 	static Init() {
 		this.ProcessProfiles.Clear()
+		this.RuntimePluginStates.Clear()
 		this.ValidateSelectionMode(this.SelectionMode)
+
+		profileNames := Map()
 
 		for profile in this.Profiles {
 			if !this.IsProfileEnabled(profile)
 				continue
+
+			profileKey := this.GetProfileKey(profile)
+			if profileKey = ""
+				throw Error("SmartKeyPressOSD profile names must not be empty.")
+			if profileNames.Has(profileKey)
+				throw Error("Duplicate SmartKeyPressOSD profile name '" this.GetProfileName(profile) "'.")
+			profileNames[profileKey] := true
 
 			if profile = this.DefaultProfile
 				continue
@@ -107,12 +118,22 @@ class SmartProfileManager {
 	}
 
 	static IsPluginEnabled(pluginName) {
+		return this.IsPluginAvailable(pluginName) && this.IsPluginRuntimeEnabled(pluginName)
+	}
+
+	static IsPluginAvailable(pluginName) {
 		if !this.Enabled
 			return true
 
+		return this.IsPluginAvailableForProfile(this.ActiveProfile, pluginName)
+	}
+
+	static IsPluginAvailableForProfile(profile, pluginName) {
+		if !profile
+			return false
+
 		enabled := false
-		profile := this.ActiveProfile
-		if profile && this.ProfileHasPluginSetting(profile, pluginName, &enabled)
+		if this.ProfileHasPluginSetting(profile, pluginName, &enabled)
 			return enabled
 
 		if this.DefaultProfile && profile != this.DefaultProfile {
@@ -121,6 +142,43 @@ class SmartProfileManager {
 		}
 
 		return true
+	}
+
+	static IsPluginRuntimeEnabled(pluginName) {
+		if !this.Enabled
+			return true
+
+		return this.IsPluginRuntimeEnabledForProfile(this.ActiveProfile, pluginName)
+	}
+
+	static IsPluginRuntimeEnabledForProfile(profile, pluginName) {
+		if !profile
+			return true
+
+		runtimeMap := this.GetRuntimePluginMap(profile, false)
+		if !runtimeMap || !runtimeMap.Has(pluginName)
+			return true
+
+		return !!runtimeMap[pluginName]
+	}
+
+	static TogglePluginForProfile(profile, pluginName, &enabled) {
+		enabled := false
+
+		if !this.Enabled || !profile
+			return false
+		if !this.IsPluginAvailableForProfile(profile, pluginName)
+			return false
+
+		enabled := !this.IsPluginRuntimeEnabledForProfile(profile, pluginName)
+		runtimeMap := this.GetRuntimePluginMap(profile, true)
+		runtimeMap[pluginName] := enabled
+		return true
+	}
+
+	static GetProfileForProcess(processName) {
+		profile := this.FindProfile(processName)
+		return profile ? profile : this.DefaultProfile
 	}
 
 	static FindProfile(processName) {
@@ -145,6 +203,27 @@ class SmartProfileManager {
 
 		enabled := !!plugins[pluginName]
 		return true
+	}
+
+	static GetRuntimePluginMap(profile, create) {
+		profileKey := this.GetProfileKey(profile)
+		if profileKey = ""
+			return 0
+
+		if !this.RuntimePluginStates.Has(profileKey) {
+			if !create
+				return 0
+			this.RuntimePluginStates[profileKey] := Map()
+		}
+
+		return this.RuntimePluginStates[profileKey]
+	}
+
+	static GetProfileKey(profile) {
+		if !profile
+			return ""
+
+		return StrLower(Trim(this.GetProfileName(profile)))
 	}
 
 	static IsProfileEnabled(profile) {
