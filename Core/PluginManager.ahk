@@ -2,19 +2,18 @@
 ;
 ; Plugin configuration:
 ;     static Enabled := true
-;     static ScopeMode := ""  ; empty = inherit SmartAppScope.Mode
+;     static ScopeMode := ""          ; empty = inherit SmartAppScope.Mode
+;     static PauseWhileTyping := true
 ;
-; Optional plugin callbacks:
+; Optional callbacks:
 ;     Init()
+;     Activated(state)
+;     Deactivated(reason, state)
 ;     WantsTick(state) -> true/false
 ;     Tick(state)
 ;     MouseDown(button, state)
 ;     MouseUp(button, state)
-;     ScopeLost()
 ;     Shutdown()
-;
-; Plugins register at startup with:
-;     PluginManager.Register(MyPlugin, "MyPlugin")
 
 class PluginManager {
 	static Plugins := []
@@ -30,7 +29,7 @@ class PluginManager {
 			Name: name,
 			Enabled: true,
 			Initialised: false,
-			ScopeAllowed: false
+			Active: false
 		})
 	}
 
@@ -41,13 +40,11 @@ class PluginManager {
 		this.Initialised := true
 
 		for record in this.Plugins {
-			; The manager does not call a plugin at all when its own Enabled flag is
-			; false. This check happens before Init().
+			; A plugin whose own Enabled property is false receives no calls at all,
+			; including Init(). Configuration changes require a reload/restart.
 			if !this.IsPluginEnabled(record)
 				continue
 
-			; Mark it initialised before Init() so Disable() can call Shutdown()
-			; if the plugin fails after partially allocating resources.
 			record.Initialised := true
 
 			try {
@@ -70,9 +67,7 @@ class PluginManager {
 		rightDown := state.RightM && !this.PreviousRightM
 		rightUp := !state.RightM && this.PreviousRightM
 
-		; Transition state is maintained centrally even while every plugin is
-		; disabled or out of scope. Re-entering scope therefore does not replay a
-		; click which happened elsewhere.
+		; Transitions are maintained centrally even while a plugin is blocked.
 		this.PreviousLeftM := state.LeftM
 		this.PreviousMiddleM := state.MiddleM
 		this.PreviousRightM := state.RightM
@@ -81,27 +76,23 @@ class PluginManager {
 			if !record.Initialised || !this.IsPluginEnabled(record)
 				continue
 
-			try {
-				scopeAllowed := SmartAppScope.IsPluginAllowed(record.Plugin, state)
-			} catch Error as err {
-				this.Disable(record, "scope evaluation", err)
+			blockReason := this.GetBlockReason(record, state)
+			if blockReason != "" {
+				if record.Active
+					this.Deactivate(record, blockReason, state)
 				continue
 			}
 
-			if !scopeAllowed {
-				if record.ScopeAllowed {
-					record.ScopeAllowed := false
-					if HasMethod(record.Plugin, "ScopeLost") {
-						try record.Plugin.ScopeLost()
-						catch Error as err {
-							this.Disable(record, "ScopeLost", err)
-						}
+			if !record.Active {
+				record.Active := true
+				if HasMethod(record.Plugin, "Activated") {
+					try record.Plugin.Activated(state)
+					catch Error as err {
+						this.Disable(record, "Activated", err)
+						continue
 					}
 				}
-				continue
 			}
-
-			record.ScopeAllowed := true
 
 			if leftDown && !this.CallMouse(record, "MouseDown", "LeftM", state)
 				continue
@@ -116,21 +107,55 @@ class PluginManager {
 			if rightUp && !this.CallMouse(record, "MouseUp", "RightM", state)
 				continue
 
-			if !record.Enabled
-				continue
 			if !HasMethod(record.Plugin, "Tick")
 				continue
 
 			try {
-				if HasMethod(record.Plugin, "WantsTick") {
-					if !record.Plugin.WantsTick(state)
-						continue
-				}
+				if HasMethod(record.Plugin, "WantsTick") && !record.Plugin.WantsTick(state)
+					continue
 
 				record.Plugin.Tick(state)
 			} catch Error as err {
 				this.Disable(record, "Tick", err)
 			}
+		}
+	}
+
+	static GetBlockReason(record, state) {
+		if !SmartProfileManager.IsPluginEnabled(record.Name)
+			return "Profile"
+
+		try {
+			if !SmartAppScope.IsPluginAllowed(record.Plugin, state)
+				return "AppScope"
+		} catch Error as err {
+			this.Disable(record, "scope evaluation", err)
+			return "Error"
+		}
+
+		if SmartInputActivity.PauseWhileTyping && state.TypingActive {
+			pausePlugin := false
+			try pausePlugin := !!record.Plugin.PauseWhileTyping
+			catch
+				pausePlugin := false
+
+			if pausePlugin
+				return "Typing"
+		}
+
+		return ""
+	}
+
+	static Deactivate(record, reason, state) {
+		record.Active := false
+
+		try {
+			if HasMethod(record.Plugin, "Deactivated")
+				record.Plugin.Deactivated(reason, state)
+			else if reason = "AppScope" && HasMethod(record.Plugin, "ScopeLost")
+				record.Plugin.ScopeLost()
+		} catch Error as err {
+			this.Disable(record, "Deactivated", err)
 		}
 	}
 
@@ -155,13 +180,9 @@ class PluginManager {
 		if !record.Enabled
 			return false
 
-		; Included plugins expose a static Enabled property. A third-party plugin
-		; without that property is treated as enabled for backwards compatibility.
-		try {
-			return !!record.Plugin.Enabled
-		} catch {
+		try return !!record.Plugin.Enabled
+		catch
 			return true
-		}
 	}
 
 	static Shutdown() {
@@ -170,9 +191,6 @@ class PluginManager {
 
 		this.Initialised := false
 
-		; Release plugins in reverse registration order. An already-initialised
-		; plugin is shut down even if its Enabled property was changed at runtime,
-		; because allocated resources still need to be released safely.
 		Loop this.Plugins.Length {
 			index := this.Plugins.Length - A_Index + 1
 			record := this.Plugins[index]
@@ -191,7 +209,7 @@ class PluginManager {
 			}
 
 			record.Initialised := false
-			record.ScopeAllowed := false
+			record.Active := false
 		}
 	}
 
@@ -200,14 +218,13 @@ class PluginManager {
 			return
 
 		record.Enabled := false
-		record.ScopeAllowed := false
+		record.Active := false
 
 		OutputDebug(
 			"SmartKeyPressOSD plugin '" record.Name
 			"' disabled after " callbackName " error: " err.Message
 		)
 
-		; Release any resources already allocated by the failing plugin.
 		if record.Initialised && HasMethod(record.Plugin, "Shutdown") {
 			try record.Plugin.Shutdown()
 			catch Error as shutdownErr

@@ -1,13 +1,18 @@
 ; SmartKeyPressOSD plugin: PointerHalo
-; Draws a hollow ring centred on the pointer.
+; Draws a hollow ring centred on the pointer and fades it after mouse inactivity.
 
 class PointerHaloPlugin {
 	static Enabled := true
-	static ScopeMode := "HoverOnly" ; halo is shown only over configured applications
+	static ScopeMode := "HoverOnly"
+	static PauseWhileTyping := true
 
 	static Diameter := 65
 	static StrokeWidth := 3.0
 	static NeutralColor := 0x80FFFF00
+
+	static IdleFadeEnabled := true
+	static IdleDelay := 1500
+	static IdleFadeDuration := 500
 
 	static Gui := 0
 	static Hdc := 0
@@ -18,13 +23,11 @@ class PointerHaloPlugin {
 
 	static Visible := false
 	static CurrentStyle := ""
+	static Opacity := 255
 	static LastX := -2147483648
 	static LastY := -2147483648
 
 	static Init() {
-		if !this.Enabled
-			return
-
 		this.Gui := Gui("+AlwaysOnTop -Caption +ToolWindow +E0x08080020")
 		this.Gui.Show("Hide w1 h1 x0 y0")
 
@@ -33,18 +36,12 @@ class PointerHaloPlugin {
 	}
 
 	static WantsTick(state) {
-		; The halo follows the pointer continuously, so it needs every host tick.
-		return this.Enabled && !!this.Gui
+		; The halo needs host ticks to follow motion and detect idle/resume state.
+		return !!this.Gui
 	}
 
-	static ScopeLost() {
-		if this.Gui && this.Visible
-			DllCall("user32\ShowWindow", "Ptr", this.Gui.Hwnd, "Int", 0)
-
-		this.Visible := false
-		this.CurrentStyle := ""
-		this.LastX := -2147483648
-		this.LastY := -2147483648
+	static Deactivated(reason, state) {
+		this.Hide(true)
 	}
 
 	static Tick(state) {
@@ -57,11 +54,33 @@ class PointerHaloPlugin {
 		else
 			style := "Neutral"
 
-		if style != this.CurrentStyle || !this.Visible {
+		opacity := 255
+
+		if this.IdleFadeEnabled && !state.MouseDown {
+			idleElapsed := A_TickCount - state.LastMouseMoveTick
+
+			if idleElapsed >= this.IdleDelay + this.IdleFadeDuration {
+				this.Hide(false)
+				return
+			}
+
+			if idleElapsed >= this.IdleDelay && this.IdleFadeDuration > 0 {
+				fadeElapsed := idleElapsed - this.IdleDelay
+				opacity := Round(255 * (1 - fadeElapsed / this.IdleFadeDuration))
+				opacity := Max(0, Min(255, opacity))
+			}
+		}
+
+		styleChanged := (style != this.CurrentStyle)
+		if styleChanged {
 			this.Render(style)
 			this.CurrentStyle := style
-			this.Present(state.X, state.Y, true)
-		} else {
+		}
+
+		if !this.Visible || styleChanged || opacity != this.Opacity {
+			this.Opacity := opacity
+			this.Present(state.X, state.Y, opacity, true)
+		} else if state.MouseMoved {
 			this.Move(state.X, state.Y)
 		}
 	}
@@ -175,7 +194,7 @@ class PointerHaloPlugin {
 		GDIPlusHost.Check(status, "PointerHalo GdipDrawEllipse")
 	}
 
-	static Present(mouseX, mouseY, showWindow := false) {
+	static Present(mouseX, mouseY, opacity := 255, showWindow := false) {
 		x := Round(mouseX - this.Diameter / 2)
 		y := Round(mouseY - this.Diameter / 2)
 
@@ -192,7 +211,7 @@ class PointerHaloPlugin {
 		blend := Buffer(4, 0)
 		NumPut("UChar", 0, blend, 0)
 		NumPut("UChar", 0, blend, 1)
-		NumPut("UChar", 255, blend, 2)
+		NumPut("UChar", opacity, blend, 2)
 		NumPut("UChar", 1, blend, 3)
 
 		ok := DllCall(
@@ -255,12 +274,24 @@ class PointerHaloPlugin {
 		this.LastY := y
 	}
 
+	static Hide(resetStyle := false) {
+		if this.Gui && this.Visible
+			DllCall("user32\ShowWindow", "Ptr", this.Gui.Hwnd, "Int", 0)
+
+		this.Visible := false
+		this.Opacity := 255
+		this.LastX := -2147483648
+		this.LastY := -2147483648
+
+		if resetStyle
+			this.CurrentStyle := ""
+	}
+
 	static Shutdown() {
 		if !this.Gui && !this.Hdc && !this.Graphics
 			return
 
-		if this.Gui
-			DllCall("user32\ShowWindow", "Ptr", this.Gui.Hwnd, "Int", 0)
+		this.Hide(true)
 
 		for _, pen in this.Pens {
 			if pen
@@ -290,9 +321,6 @@ class PointerHaloPlugin {
 			this.Gui.Destroy()
 			this.Gui := 0
 		}
-
-		this.Visible := false
-		this.CurrentStyle := ""
 	}
 }
 

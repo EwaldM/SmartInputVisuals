@@ -4,6 +4,7 @@
 class ClickRipplesPlugin {
 	static Enabled := true
 	static ScopeMode := "" ; empty = inherit SmartAppScope.Mode
+	static PauseWhileTyping := true
 
 	static Lifetime := 650
 	static MaxRadius := 52
@@ -20,7 +21,7 @@ class ClickRipplesPlugin {
 		return this.Enabled && this.Ripples.Length > 0
 	}
 
-	static ScopeLost() {
+	static Deactivated(reason, state) {
 		this.ClearRipples()
 	}
 

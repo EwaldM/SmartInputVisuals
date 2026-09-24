@@ -4,6 +4,7 @@
 class KeyPressOSDPlugin {
 	static Enabled := true
 	static ScopeMode := "" ; empty = inherit SmartAppScope.Mode
+	static PauseWhileTyping := true
 
 	static HoldDelay := 700
 	static FadeDuration := 450
@@ -56,7 +57,7 @@ class KeyPressOSDPlugin {
 		return this.Enabled && (state.MouseDown || this.Visible)
 	}
 
-	static ScopeLost() {
+	static Deactivated(reason, state) {
 		this.Hide()
 	}
 

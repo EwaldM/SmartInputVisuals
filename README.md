@@ -2,163 +2,75 @@
 
 [![Licence: CC BY 4.0](https://img.shields.io/badge/Licence-CC_BY_4.0-lightgrey.svg)](https://creativecommons.org/licenses/by/4.0/)
 
-SmartKeyPressOSD is a small AutoHotkey v2 host for optional, same-process mouse visualisation plugins. The host samples input once, maintains a reusable shared state object, owns the GDI+ lifetime, evaluates optional application scope centrally, and dispatches events only to enabled, in-scope plugins.
+SmartKeyPressOSD is an AutoHotkey v2 input-visualisation host with optional same-process plugins for text OSD, pointer highlighting, click ripples and drag visualisation.
 
-The original text OSD is now itself a plugin, so all visual features are optional and follow the same architecture.
+## Features
 
-## Included plugins
-
-- `KeyPressOSD` - displays mouse buttons and accompanying `Ctrl`, `Shift`, and `Alt` modifiers in a layered OSD near the pointer.
-- `PointerHalo` - draws a hollow ring around the pointer and changes its colour when a mouse button is held.
-- `ClickRipples` - draws expanding concentric circles at the click position.
-
-All three plugins run inside the **same AutoHotkey process**. No plugin starts a second AutoHotkey process.
+- `KeyPressOSD` — modifier/mouse-button text display
+- `PointerHalo` — hollow pointer halo with idle fade
+- `ClickRipples` — expanding concentric click rings
+- `DragIndicator` — dashed drag line with an arrowhead
+- globally shared mouse-button colours
+- application focus/hover filtering
+- application-specific plugin profiles
+- pause visualisations while ordinary keyboard typing is active
+- one shared 20 ms input/presentation timer
+- central GDI+ lifetime management
+- no external libraries
 
 ## Requirements
 
 - Windows
 - AutoHotkey v2
 
-The project uses Windows APIs and GDI+ directly through `DllCall`, so it is Windows-specific.
-
 ## Project structure
 
 ```text
 SmartKeyPressOSD/
-|-- SmartKeyPressOSD.ahk
-|-- README.md
-|-- LICENSE.md
-|-- Core/
-|   |-- SharedTheme.ahk
-|   |-- GDIPlusHost.ahk
-|   |-- InputState.ahk
-|   |-- AppScope.ahk
-|   `-- PluginManager.ahk
-`-- Plugins/
-    |-- KeyPressOSD.ahk
-    |-- PointerHalo.ahk
-    `-- ClickRipples.ahk
+├─ SmartKeyPressOSD.ahk
+├─ README.md
+├─ LICENSE.md
+├─ Core/
+│  ├─ AppScope.ahk
+│  ├─ GDIPlusHost.ahk
+│  ├─ InputActivity.ahk
+│  ├─ InputState.ahk
+│  ├─ PluginManager.ahk
+│  ├─ ProfileManager.ahk
+│  └─ SharedTheme.ahk
+├─ Profiles/
+│  ├─ Default.ahk
+│  └─ AppProfiles.ahk
+└─ Plugins/
+   ├─ ClickRipples.ahk
+   ├─ DragIndicator.ahk
+   ├─ KeyPressOSD.ahk
+   └─ PointerHalo.ahk
 ```
-
-### Host and core
-
-`SmartKeyPressOSD.ahk` is deliberately small. It:
-
-1. starts GDI+ once;
-2. runs one application timer;
-3. updates one persistent `SmartInputState` object;
-4. evaluates the configured foreground/hover application scope;
-5. dispatches that state only to enabled, in-scope plugins;
-6. shuts plugins down before shutting GDI+ down.
-
-`Core/InputState.ahk` contains the reusable input state object.
-
-`Core/AppScope.ahk` resolves foreground and hovered applications and applies the configured application filter.
-
-`Core/PluginManager.ahk` detects button transitions centrally and dispatches callbacks only to enabled, in-scope plugins.
-
-`Core/SharedTheme.ahk` contains colours shared by every plugin.
-
-`Core/GDIPlusHost.ahk` owns the single `GdiplusStartup()` / `GdiplusShutdown()` pair.
 
 ## Installation
 
 1. Install AutoHotkey v2.
-2. Keep the complete directory structure intact.
+2. Keep the complete directory structure together.
 3. Run `SmartKeyPressOSD.ahk`.
 
-To start it automatically with Windows, create a shortcut to `SmartKeyPressOSD.ahk` in the Windows Startup folder.
+To start it with Windows, place a shortcut to `SmartKeyPressOSD.ahk` in the Startup folder (`Win + R`, then `shell:startup`).
 
-Open that folder with:
+## Shared colours
 
-```text
-Win + R
-shell:startup
-```
-
-## Shared mouse-button colours
-
-The button colours are defined once in `Core/SharedTheme.ahk`:
+Mouse-button colours are defined once in `Core/SharedTheme.ahk` and reused by all plugins:
 
 ```ahk
-class SmartKeyPressTheme {
-    static MouseColors := Map(
-        "LeftM",   0xFF0000FF,  ; blue
-        "MiddleM", 0xFF008000,  ; green
-        "RightM",  0xFFFF0000   ; red
-    )
-}
+static MouseColors := Map(
+	"LeftM",   0xFF0000FF,
+	"MiddleM", 0xFF008000,
+	"RightM",  0xFFFF0000
+)
 ```
 
-`KeyPressOSD`, `PointerHalo`, and `ClickRipples` all use this same map. Changing a button colour here changes it everywhere.
+## KeyPressOSD
 
-Colours use ARGB format:
-
-```text
-0xAARRGGBB
-```
-
-## Application scope
-
-Application filtering is configured centrally in `Core/AppScope.ahk`. Changes to this file take effect after reloading or restarting SmartKeyPressOSD.
-
-By default it is disabled, so all plugins behave exactly as before:
-
-```ahk
-class SmartAppScope {
-	static Enabled := false
-	static Mode := "FocusOrHover"
-	static Applications := []
-}
-```
-
-To restrict visualisations to selected applications, enable the filter and list their executable names:
-
-```ahk
-class SmartAppScope {
-	static Enabled := true
-	static Mode := "FocusOrHover"
-	static Applications := [
-		"devenv.exe",
-		"msedge.exe"
-	]
-}
-```
-
-Supported modes are:
-
-| Mode | Behaviour |
-|---|---|
-| `Always` | Always allowed, regardless of the configured application list |
-| `FocusOnly` | Allowed when a configured application has keyboard focus |
-| `HoverOnly` | Allowed when the pointer is over a configured application |
-| `FocusOrHover` | Allowed when either condition is true |
-| `FocusAndHover` | Allowed only when both conditions are true |
-
-Executable-name matching is case-insensitive.
-
-The foreground and hovered process names are cached and are resolved again only when the corresponding window handle changes. When SmartKeyPressOSD's own topmost layered windows are encountered under the pointer, the scope resolver looks beneath them for the external application window.
-
-### Per-plugin scope override
-
-Plugins can define a `ScopeMode` override. An empty value inherits `SmartAppScope.Mode`.
-
-The included `PointerHalo` plugin defaults to `HoverOnly`, so the halo disappears as soon as the pointer leaves a configured application, even if that application remains focused. For example:
-
-```ahk
-class PointerHaloPlugin {
-	static Enabled := true
-	static ScopeMode := "HoverOnly"
-}
-```
-
-Application filtering still uses the same global `SmartAppScope.Applications` list. `KeyPressOSD` and `ClickRipples` currently inherit the global mode with `ScopeMode := ""`.
-
-## KeyPressOSD plugin
-
-`Plugins/KeyPressOSD.ahk` contains the original text OSD functionality.
-
-Examples:
+A plain left click is intentionally suppressed. If another modifier or mouse button participates, the complete combination is displayed.
 
 | Input | Display |
 |---|---|
@@ -166,62 +78,40 @@ Examples:
 | Middle click | `MiddleM` |
 | Right click | `RightM` |
 | Ctrl + left click | `Ctrl+LeftM` |
+| Ctrl + Shift + left click | `Ctrl+Shift+LeftM` |
 | Shift + middle click | `Shift+MiddleM` |
 | Shift + right click | `Shift+RightM` |
-| Ctrl + Shift + left click | `Ctrl+Shift+LeftM` |
-| Ctrl while typing | No text OSD |
-| Shift while typing | No text OSD |
-| Alt while typing | No text OSD |
 
-A plain left click is intentionally suppressed. When the left button is combined with a modifier or another mouse button, the full combination is shown, including `LeftM`.
-
-The plugin follows the pointer during a drag, keeps the final text visible for a short period after release, then fades it out.
-
-Important configuration values are near the top of `Plugins/KeyPressOSD.ahk`:
+Default position/timing settings in `Plugins/KeyPressOSD.ahk`:
 
 ```ahk
 static HoldDelay := 700
 static FadeDuration := 450
 static OffsetX := 30
 static OffsetY := -35
-
-static MaxWidth := 420
-static Height := 42
-static PaddingX := 5
-static PaddingY := 7
-static FontName := "Segoe UI"
-static FontSize := 19
 ```
 
-The background colour, mouse-button colours, modifier colour and separator colour come from `SmartKeyPressTheme`.
+## PointerHalo and IdleFade
 
-## PointerHalo plugin
-
-`Plugins/PointerHalo.ahk` draws a hollow ring centred on the pointer.
-
-Default configuration:
+`Plugins/PointerHalo.ahk` draws a hollow ring centred on the pointer. It defaults to `HoverOnly` application scope, so it disappears as soon as the pointer leaves an allowed application.
 
 ```ahk
-static Enabled := true
-static ScopeMode := "HoverOnly"
 static Diameter := 65
 static StrokeWidth := 3.0
 static NeutralColor := 0x80FFFF00
+
+static IdleFadeEnabled := true
+static IdleDelay := 1500
+static IdleFadeDuration := 500
 ```
 
-The neutral colour is used when no mouse button is held. While a button is held, the halo uses that button's globally shared colour.
+After `IdleDelay` milliseconds without pointer movement, the halo fades over `IdleFadeDuration`. Moving the pointer or holding a mouse button restores full visibility immediately.
 
-The halo bitmap is redrawn only when its visual style changes. Ordinary pointer movement uses `SetWindowPos()`.
+## ClickRipples
 
-## ClickRipples plugin
-
-`Plugins/ClickRipples.ahk` creates expanding concentric rings on mouse-button press.
-
-Default configuration:
+`Plugins/ClickRipples.ahk` creates expanding rings at each mouse-button press. The button colour comes from `SmartKeyPressTheme.MouseColors`.
 
 ```ahk
-static Enabled := true
-static ScopeMode := ""
 static Lifetime := 650
 static MaxRadius := 52
 static MinRadius := 7
@@ -231,35 +121,138 @@ static StrokeWidth := 3.0
 static MaxActiveRipples := 6
 ```
 
-Each ripple uses the globally shared colour for the mouse button which created it.
+## DragIndicator
 
-The plugin is not ticked while no ripple animation is active.
-
-## Plugin system
-
-Plugins are ordinary `.ahk` files included at script startup:
+`Plugins/DragIndicator.ahk` displays a straight dashed line from the drag start point to the current pointer position. A solid arrowhead marks the current position, and the entire indicator uses the colour of the mouse button which started the drag.
 
 ```ahk
-#Include "*i Plugins\KeyPressOSD.ahk"
-#Include "*i Plugins\PointerHalo.ahk"
-#Include "*i Plugins\ClickRipples.ahk"
+static DragThreshold := 6
+static StrokeWidth := 3.0
+static ArrowLength := 15.0
+static ArrowHalfWidth := 7.0
+static UpdateInterval := 33
+static MinMovement := 2
 ```
 
-The `*i` option makes each include optional. If a plugin file is missing, the host still starts normally.
+The indicator does not appear until the pointer has moved at least `DragThreshold` pixels, so ordinary clicks do not flash a line. Rendering is limited to roughly 30 FPS and movements below `MinMovement` pixels are ignored between rendered frames.
 
-Because `#Include` is processed at script startup, adding or removing a plugin requires a **reload or restart**. Plugins are not compiled into an already-running AutoHotkey script dynamically.
+The original single layered backing DIB is used for reliable rendering. It grows in 32-pixel blocks only when needed and is released when the drag ends, so drag memory is not retained while the plugin is idle. A very long diagonal drag can still require a temporarily large backing surface because the bitmap must cover the line's bounding rectangle.
 
-### Plugin callbacks
+## Pause while typing
 
-A plugin may implement any of these callbacks:
+Keyboard activity is tracked centrally by `Core/InputActivity.ahk` using a non-blocking `InputHook`.
+
+```ahk
+static PauseWhileTyping := true
+static TypingPauseDuration := 750
+```
+
+Modifier-only presses (`Ctrl`, `Shift`, `Alt`, Windows keys) do not count as typing. A normal key in a combination does; for example, pressing `Ctrl` alone does not pause visualisations, while `Ctrl+C` does.
+
+A plugin opts into this behaviour with:
+
+```ahk
+static PauseWhileTyping := true
+```
+
+All included visual plugins opt in. While typing suppression is active, `PluginManager` does not dispatch mouse or tick callbacks to those plugins. A currently visible plugin receives one `Deactivated("Typing", state)` callback so it can remove its existing visualisation, then receives no normal callbacks until it becomes eligible again.
+
+## Application scope
+
+Configure `Core/AppScope.ahk` to restrict plugins to selected applications:
+
+```ahk
+static Enabled := true
+static Mode := "FocusOrHover"
+static Applications := [
+	"devenv.exe",
+	"msedge.exe"
+]
+```
+
+Supported modes:
+
+| Mode | Behaviour |
+|---|---|
+| `Always` | Ignore the application list for that plugin |
+| `FocusOnly` | Configured application must have focus |
+| `HoverOnly` | Pointer must be over a configured application |
+| `FocusOrHover` | Either condition is sufficient |
+| `FocusAndHover` | Both conditions are required |
+
+Plugins may override the global mode with `static ScopeMode := "..."`. `PointerHalo` defaults to `HoverOnly`; the other included plugins inherit the global mode.
+
+Process names are cached and are resolved again only when the relevant window handle changes. SmartKeyPressOSD's own topmost click-through windows are skipped when resolving the application beneath the pointer.
+
+## Application-specific profiles
+
+Profiles control **which plugins are enabled for particular applications**. This is independent of application scope: profiles choose a plugin set, while `AppScope` controls where a plugin is permitted to display.
+
+Profiles are enabled by default in `Core/ProfileManager.ahk`:
+
+```ahk
+static Enabled := true
+static SelectionMode := "HoverThenFocus"
+```
+
+Supported selection modes:
+
+- `HoverThenFocus` — the hovered application determines the profile; focus is used only when no hovered process can be resolved
+- `FocusThenHover` — the focused application determines the profile; hover is used only when no focused process can be resolved
+- `HoverOnly` — the hovered application determines the profile
+- `FocusOnly` — the focused application determines the profile
+
+For every selected application, an application-specific profile is used when one is registered; otherwise the `Default` profile is used immediately. This means moving the pointer from a profiled application to an unprofiled application switches to the Default profile without requiring a focus change.
+
+`Profiles/Default.ahk` defines the fallback plugin set and enables only `KeyPressOSD`. `Profiles/AppProfiles.ahk` contains the application-specific profiles.
+
+Included profiles:
+
+- `EA.exe` / **Enterprise Architect** — `KeyPressOSD`, `PointerHalo`, `ClickRipples`, and `DragIndicator`
+- `LemonTree.exe` / **LemonTree** — `PointerHalo` and `ClickRipples` only
+
+Example profile definition:
+
+```ahk
+class LemonTreeProfile {
+	static Name := "LemonTree"
+	static Applications := ["LemonTree.exe"]
+	static Plugins := Map(
+		"KeyPressOSD", false,
+		"PointerHalo", true,
+		"ClickRipples", true,
+		"DragIndicator", false
+	)
+}
+```
+
+Plugin names omitted from an application-specific profile fall back to the corresponding setting in the Default profile. Executable names are matched case-insensitively. Duplicate executable mappings are rejected during startup.
+
+When a profile disables an already-visible plugin, the manager sends one `Deactivated("Profile", state)` callback so the plugin can clear its visualisation, then stops dispatching normal callbacks to it.
+
+## Plugin eligibility and lifecycle
+
+The manager applies eligibility centrally in this order:
+
+1. plugin's own `Enabled` flag
+2. active application profile
+3. application scope
+4. pause-while-typing policy
+
+A plugin with `Enabled := false` is not initialised and receives no plugin calls at all. Changing `Enabled` in source therefore requires a reload/restart.
+
+For profile, scope or typing transitions, an active plugin may receive one `Deactivated(reason, state)` cleanup callback. Once blocked, it receives no `WantsTick`, `Tick`, `MouseDown` or `MouseUp` calls.
+
+Optional plugin callbacks are:
 
 ```text
 Init()
+Activated(state)
+Deactivated(reason, state)
 WantsTick(state)
 Tick(state)
 MouseDown(button, state)
 MouseUp(button, state)
-ScopeLost()
 Shutdown()
 ```
 
@@ -269,21 +262,17 @@ Register a plugin with:
 PluginManager.Register(MyPlugin, "MyPlugin")
 ```
 
-`WantsTick(state)` is optional. If present and it returns `false`, the manager skips that plugin's `Tick()` call for the current host tick.
+## Shared input state
 
-`ScopeLost()` is optional and is called once when an enabled plugin moves from an allowed application scope to a disallowed one. The included visual plugins use it to hide or clear their current visualisation immediately.
+The host allocates one `SmartInputState` instance and updates it in place. Plugins share it instead of allocating per-tick Maps.
 
-The plugin manager evaluates `Enabled` and application scope **before** calling `WantsTick()`, mouse callbacks, or `Tick()`. A plugin whose `Enabled` property is `false` is not initialised and receives no normal callbacks at all.
-
-### Shared state object
-
-The host allocates one `SmartInputState` object and updates it in place. Plugins receive the same object rather than new Maps or state objects being allocated every 20 ms.
-
-Available properties are:
+Useful properties include:
 
 ```text
 state.X
 state.Y
+state.MouseMoved
+state.LastMouseMoveTick
 state.LeftM
 state.MiddleM
 state.RightM
@@ -291,157 +280,41 @@ state.MouseDown
 state.Ctrl
 state.Shift
 state.Alt
-state.HoverHwnd
-state.ActiveHwnd
+state.TypingActive
+state.LastTypingTick
 state.HoverProcess
 state.ActiveProcess
-state.HoverAllowed
-state.FocusAllowed
-state.ScopeAllowed
-```
-
-The current plugins only need modifiers while a mouse button is held, so modifier key state is queried only in that situation.
-
-### Plugin isolation
-
-If a plugin callback raises an AutoHotkey `Error`, the manager disables that plugin, attempts to release its resources, and writes diagnostic information with `OutputDebug`.
-
-Other plugins continue running.
-
-## Enabling or disabling plugins
-
-The included plugins are enabled by default.
-
-You can disable one either by removing/renaming its file and restarting, or by changing its `Enabled` setting and reloading/restarting. The `PluginManager` checks this setting before `Init()` and before every normal dispatch, so a disabled plugin is skipped by the manager rather than being called and expected to return early. For example:
-
-```ahk
-class PointerHaloPlugin {
-    static Enabled := false
+state.ProfileName
+state.ProfileProcess
 ```
 
 ## Performance design
 
-The refactored architecture is designed to avoid performance regressions from modularisation.
+SmartKeyPressOSD uses one 20 ms host timer. Pointer position and mouse-button state are sampled once per tick and shared with all plugins.
 
-### One timer
+The architecture avoids unnecessary work by:
 
-There is exactly one application timer by default:
-
-```ahk
-APP_POLL_INTERVAL := 20
-```
-
-At the default value, the host runs at up to 50 polling ticks per second.
-
-Plugins do not create their own polling timers.
-
-### Input is sampled once
-
-Each host tick reads the pointer, hovered window handle, and mouse buttons exactly once into the persistent `SmartInputState` object. All plugins consume that same state.
-
-No plugin repeats `MouseGetPos()` or physical button polling.
-
-### Persistent state, no per-tick state Maps
-
-The host does not create new button/modifier Maps on every poll. The same `SmartInputState` instance is updated in place.
-
-### Transition events are centralised
-
-The plugin manager detects `MouseDown` and `MouseUp` transitions once and dispatches them to interested plugins. Individual plugins do not maintain duplicate transition detectors.
-
-### Disabled, out-of-scope and inactive plugins are skipped
-
-The manager first checks the plugin's `Enabled` property. Disabled plugins receive no normal callbacks.
-
-When `SmartAppScope.Enabled` is `true`, the manager also checks the configured application scope before dispatching mouse or tick callbacks. An out-of-scope plugin receives only a one-time `ScopeLost()` transition callback if it had previously been in scope.
-
-For plugins which are enabled and in scope, `WantsTick(state)` avoids normal tick processing while idle:
-
-- `KeyPressOSD` is skipped while hidden and no mouse button is down.
-- `ClickRipples` is skipped while there are no active animations.
-- `PointerHalo` receives every in-scope tick because it must follow the pointer.
-
-### Application-scope lookup is cached
-
-When application filtering is disabled, the host does not perform foreground/hover process-name lookups.
-
-When it is enabled, process names are resolved only when the foreground or effective hovered window handle changes. The names are then reused on subsequent 20 ms ticks.
-
-### Rendering is event-driven where possible
-
-`KeyPressOSD` retains the important optimisations from the original implementation:
-
-- fixed backing DIB;
-- cached text widths;
-- cached GDI+ brushes;
-- text redraw only when the displayed combination changes;
-- `SetWindowPos()` for normal drag-follow movement;
-- `UpdateLayeredWindow()` only when bitmap, size or opacity changes;
-- fade without rerendering text.
-
-`PointerHalo` redraws its GDI+ surface only when the halo colour/style changes. Normal movement uses `SetWindowPos()`.
-
-`ClickRipples` necessarily redraws while an animation is active, but the number of simultaneous animations is capped by `MaxActiveRipples` and the plugin receives no tick calls when idle.
+- skipping globally disabled plugins before initialisation and dispatch;
+- skipping plugins disabled by the active profile;
+- skipping out-of-scope plugins;
+- skipping pause-while-typing plugins while typing is active;
+- calling `WantsTick()` only after all eligibility checks pass;
+- using persistent input state instead of per-tick Maps;
+- caching application process names;
+- using `SetWindowPos()` for unchanged moving visuals where possible;
+- redrawing `PointerHalo` only when its style/opacity changes;
+- ticking `ClickRipples` only while animations are active;
+- throttling `DragIndicator` rendering to roughly 30 FPS, ignoring sub-2-pixel movement and releasing its backing surface after each drag.
 
 ## GDI+ lifetime
 
-`gdiplus.dll` is explicitly kept loaded for the complete script lifetime.
+`gdiplus.dll` is kept loaded for the script lifetime. `GDIPlusHost` starts GDI+ exactly once; plugins create and release their own drawing resources but never start or stop GDI+ themselves.
 
-`GDIPlusHost` starts GDI+ once. Plugins create and destroy their own GDI/GDI+ drawing objects but must **not** call `GdiplusStartup()` or `GdiplusShutdown()` themselves.
-
-During exit:
-
-1. the host timer is stopped;
-2. plugins release their resources;
-3. the host performs the single GDI+ shutdown call.
-
-This preserves the shutdown fix which prevents the earlier access violation during script exit.
-
-## Creating another plugin
-
-A minimal plugin can be written as:
-
-```ahk
-class MyPlugin {
-    static Enabled := true
-    static ScopeMode := ""
-
-    static Init() {
-    }
-
-    static WantsTick(state) {
-        return true
-    }
-
-    static Tick(state) {
-    }
-
-    static MouseDown(button, state) {
-        colour := SmartKeyPressTheme.MouseColors[button]
-        x := state.X
-        y := state.Y
-    }
-
-    static MouseUp(button, state) {
-    }
-
-    static ScopeLost() {
-    }
-
-    static Shutdown() {
-    }
-}
-
-PluginManager.Register(MyPlugin, "MyPlugin")
-```
-
-Add an optional include to `SmartKeyPressOSD.ahk`, then reload or restart the host.
+At exit the host stops the timer, shuts down plugins, stops keyboard activity tracking, then shuts GDI+ down last.
 
 ## Licence
 
 This project is licensed under the **Creative Commons Attribution 4.0 International licence (CC BY 4.0)**.
-
-You are free to share and adapt the project, including for commercial purposes, provided that appropriate attribution is given, a link to the licence is provided, and changes are indicated.
 
 See [`LICENSE.md`](LICENSE.md) for details.
 

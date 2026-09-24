@@ -28,13 +28,11 @@ class SmartAppScope {
 				this.AllowedProcesses[normalized] := true
 		}
 
-		; Validate the global mode at startup even when scoping is disabled so a
-		; later change of Enabled does not expose a latent configuration error.
 		this.MatchMode(this.Mode, false, false)
 	}
 
-	static Update(state) {
-		if !this.Enabled {
+	static Update(state, needProcessContext := false) {
+		if !this.Enabled && !needProcessContext {
 			state.ActiveHwnd := 0
 			state.ActiveProcess := ""
 			state.HoverProcess := ""
@@ -61,13 +59,20 @@ class SmartAppScope {
 		state.HoverHwnd := hoverHwnd
 		state.ActiveProcess := this.LastActiveProcess
 		state.HoverProcess := this.LastHoverProcess
-		state.FocusAllowed := this.IsProcessAllowed(state.ActiveProcess)
-		state.HoverAllowed := this.IsProcessAllowed(state.HoverProcess)
-		state.ScopeAllowed := this.MatchMode(
-			this.Mode,
-			state.FocusAllowed,
-			state.HoverAllowed
-		)
+
+		if this.Enabled {
+			state.FocusAllowed := this.IsProcessAllowed(state.ActiveProcess)
+			state.HoverAllowed := this.IsProcessAllowed(state.HoverProcess)
+			state.ScopeAllowed := this.MatchMode(
+				this.Mode,
+				state.FocusAllowed,
+				state.HoverAllowed
+			)
+		} else {
+			state.FocusAllowed := true
+			state.HoverAllowed := true
+			state.ScopeAllowed := true
+		}
 	}
 
 	static IsPluginAllowed(plugin, state) {
@@ -77,11 +82,9 @@ class SmartAppScope {
 		mode := this.Mode
 		pluginMode := ""
 
-		try {
-			pluginMode := plugin.ScopeMode
-		} catch {
+		try pluginMode := plugin.ScopeMode
+		catch
 			pluginMode := ""
-		}
 
 		if pluginMode != ""
 			mode := pluginMode
@@ -120,11 +123,9 @@ class SmartAppScope {
 		if !hwnd
 			return ""
 
-		try {
-			return WinGetProcessName("ahk_id " hwnd)
-		} catch {
+		try return WinGetProcessName("ahk_id " hwnd)
+		catch
 			return ""
-		}
 	}
 
 	static ResolveHoverWindow(hwnd, x, y) {
@@ -134,7 +135,7 @@ class SmartAppScope {
 		rootHwnd := DllCall(
 			"user32\GetAncestor",
 			"Ptr", hwnd,
-			"UInt", 2, ; GA_ROOT
+			"UInt", 2,
 			"Ptr"
 		)
 
@@ -145,14 +146,14 @@ class SmartAppScope {
 			return rootHwnd
 
 		; SmartKeyPressOSD's layered windows are click-through and topmost. If one
-		; of them is returned as the hovered window, walk down the Z-order and find
-		; the first visible external top-level window containing the pointer.
+		; is returned, walk down the Z-order to the first visible external window
+		; which still contains the current pointer position.
 		candidate := rootHwnd
 		Loop 100 {
 			candidate := DllCall(
 				"user32\GetWindow",
 				"Ptr", candidate,
-				"UInt", 2, ; GW_HWNDNEXT
+				"UInt", 2,
 				"Ptr"
 			)
 

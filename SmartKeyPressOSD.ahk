@@ -7,24 +7,32 @@
 
 #Include Core\SharedTheme.ahk
 #Include Core\GDIPlusHost.ahk
+#Include Core\InputActivity.ahk
 #Include Core\InputState.ahk
 #Include Core\AppScope.ahk
+#Include Core\ProfileManager.ahk
 #Include Core\PluginManager.ahk
+
+; Profiles register before plugins are initialised.
+#Include Profiles\Default.ahk
+#Include "*i Profiles\AppProfiles.ahk"
 
 ; Optional same-process plugins. Missing files are ignored at startup.
 #Include "*i Plugins\KeyPressOSD.ahk"
 #Include "*i Plugins\PointerHalo.ahk"
 #Include "*i Plugins\ClickRipples.ahk"
+#Include "*i Plugins\DragIndicator.ahk"
 
 InstallKeybdHook()
 InstallMouseHook()
 CoordMode("Mouse", "Screen")
 
-; One shared timer drives the entire application.
 APP_POLL_INTERVAL := 20
 AppState := SmartInputState()
 
+SmartInputActivity.Init()
 SmartAppScope.Init()
+SmartProfileManager.Init()
 GDIPlusHost.Init()
 OnExit(ShutdownApplication)
 
@@ -34,22 +42,19 @@ SetTimer(AppTick, APP_POLL_INTERVAL)
 AppTick() {
 	global AppState
 
-	; Input is sampled exactly once per application tick.
 	AppState.Update()
 
-	; Resolve optional foreground/hover application scope centrally.
-	SmartAppScope.Update(AppState)
-
-	; The same persistent state object is passed to every in-scope plugin.
+	; Profiles need foreground/hover process context even when AppScope itself is
+	; disabled, so AppScope resolves process names whenever profiles are enabled.
+	SmartAppScope.Update(AppState, SmartProfileManager.Enabled)
+	SmartProfileManager.Update(AppState)
 	PluginManager.Process(AppState)
 }
 
 ShutdownApplication(*) {
-	; Stop new work before resources are released.
 	SetTimer(AppTick, 0)
 
-	; Plugins release their GDI/GDI+ resources first. The host owns the single
-	; matching GDI+ shutdown call and performs it last.
 	PluginManager.Shutdown()
+	SmartInputActivity.Shutdown()
 	GDIPlusHost.Shutdown()
 }
