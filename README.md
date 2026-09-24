@@ -206,19 +206,14 @@ For every selected application, an application-specific profile is used when one
 
 `Profiles/Default.ahk` defines the fallback plugin set and enables only `KeyPressOSD`. `Profiles/AppProfiles.ahk` contains the application-specific profiles.
 
-Included profiles:
-
-- `EA.exe` / **Enterprise Architect** — `KeyPressOSD`, `PointerHalo`, `ClickRipples`, and `DragIndicator`
-- `LemonTree.exe` / **LemonTree** — `PointerHalo` and `ClickRipples` only
-
 Example profile definition:
 
 ```ahk
-class LemonTreeProfile {
-	static Name := "LemonTree"
-	static Applications := ["LemonTree.exe"]
+class PowerPointProfile {
+	static Name := "PowerPoint"
+	static Applications := ["POWERPNT.EXE"]
 	static Plugins := Map(
-		"KeyPressOSD", false,
+		"KeyPressOSD", true,
 		"PointerHalo", true,
 		"ClickRipples", true,
 		"DragIndicator", false
