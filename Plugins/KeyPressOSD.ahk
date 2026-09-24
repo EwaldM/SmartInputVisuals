@@ -7,7 +7,6 @@ class KeyPressOSDPlugin {
 	static PauseWhileTyping := true
 
 	static HoldDelay := 700
-	static FadeDuration := 450
 	static OffsetX := 30
 	static OffsetY := -35
 
@@ -110,8 +109,8 @@ class KeyPressOSDPlugin {
 		}
 
 		fadeElapsed := elapsed - this.HoldDelay
-		if fadeElapsed < this.FadeDuration {
-			opacity := Round(255 * (1 - fadeElapsed / this.FadeDuration))
+		if fadeElapsed < SmartKeyPressTheme.FadeDuration {
+			opacity := Round(255 * (1 - fadeElapsed / SmartKeyPressTheme.FadeDuration))
 			opacity := Max(0, Min(255, opacity))
 
 			if opacity != this.Opacity {

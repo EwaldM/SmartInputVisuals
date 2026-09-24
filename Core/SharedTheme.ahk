@@ -13,4 +13,7 @@ class SmartKeyPressTheme {
 	static OtherTextColor := 0xFF000000 ; black
 
 	static BackgroundColor := 0x40FFFF00 ; yellow at approximately 25% opacity
+
+	static FadeDuration := 450
+	static IdleFadeDuration := 900
 }

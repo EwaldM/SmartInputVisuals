@@ -67,7 +67,12 @@ static MouseColors := Map(
 	"MiddleM", 0xFF008000,
 	"RightM",  0xFFFF0000
 )
+
+static FadeDuration := 450
+static IdleFadeDuration := 900
 ```
+
+`FadeDuration` is shared by transient visualisations such as `KeyPressOSD` and `DragIndicator`. `IdleFadeDuration` is used for the longer pointer-halo idle fade.
 
 ## KeyPressOSD
 
@@ -87,7 +92,6 @@ Default position/timing settings in `Plugins/KeyPressOSD.ahk`:
 
 ```ahk
 static HoldDelay := 700
-static FadeDuration := 450
 static OffsetX := 30
 static OffsetY := -35
 ```
@@ -103,10 +107,9 @@ static NeutralColor := 0xA08B008B
 
 static IdleFadeEnabled := true
 static IdleDelay := 2500
-static IdleFadeDuration := 900
 ```
 
-After `IdleDelay` milliseconds without pointer movement, the halo fades over `IdleFadeDuration`. Moving the pointer or holding a mouse button restores full visibility immediately.
+After `IdleDelay` milliseconds without pointer movement, the halo fades over `SmartKeyPressTheme.IdleFadeDuration`. Moving the pointer or holding a mouse button restores full visibility immediately.
 
 ## ClickRipples
 
@@ -135,7 +138,7 @@ static UpdateInterval := 33
 static MinMovement := 2
 ```
 
-The indicator does not appear until the pointer has moved at least `DragThreshold` pixels, so ordinary clicks do not flash a line. Rendering is limited to roughly 30 FPS and movements below `MinMovement` pixels are ignored between rendered frames.
+The indicator does not appear until the pointer has moved at least `DragThreshold` pixels, so ordinary clicks do not flash a line. Rendering is limited to roughly 30 FPS and movements below `MinMovement` pixels are ignored between rendered frames. After the drag ends, the final arrow line fades out over `SmartKeyPressTheme.FadeDuration` milliseconds before its backing surface is released.
 
 The original single layered backing DIB is used for reliable rendering. It grows in 32-pixel blocks only when needed and is released when the drag ends, so drag memory is not retained while the plugin is idle. A very long diagonal drag can still require a temporarily large backing surface because the bitmap must cover the line's bounding rectangle.
 

@@ -12,7 +12,6 @@ class PointerHaloPlugin {
 
 	static IdleFadeEnabled := true
 	static IdleDelay := 2500
-	static IdleFadeDuration := 900
 
 	static Gui := 0
 	static Hdc := 0
@@ -59,14 +58,14 @@ class PointerHaloPlugin {
 		if this.IdleFadeEnabled && !state.MouseDown {
 			idleElapsed := A_TickCount - state.LastMouseMoveTick
 
-			if idleElapsed >= this.IdleDelay + this.IdleFadeDuration {
+			if idleElapsed >= this.IdleDelay + SmartKeyPressTheme.IdleFadeDuration {
 				this.Hide(false)
 				return
 			}
 
-			if idleElapsed >= this.IdleDelay && this.IdleFadeDuration > 0 {
+			if idleElapsed >= this.IdleDelay && SmartKeyPressTheme.IdleFadeDuration > 0 {
 				fadeElapsed := idleElapsed - this.IdleDelay
-				opacity := Round(255 * (1 - fadeElapsed / this.IdleFadeDuration))
+				opacity := Round(255 * (1 - fadeElapsed / SmartKeyPressTheme.IdleFadeDuration))
 				opacity := Max(0, Min(255, opacity))
 			}
 		}

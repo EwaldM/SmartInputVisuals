@@ -30,6 +30,13 @@ class DragIndicatorPlugin {
 	static LastEndX := -2147483648
 	static LastEndY := -2147483648
 	static LastRenderTick := 0
+	static FadeStartTick := 0
+	static Fading := false
+	static Opacity := 255
+	static LastPresentX := 0
+	static LastPresentY := 0
+	static LastPresentWidth := 0
+	static LastPresentHeight := 0
 	static Visible := false
 
 	static Init() {
@@ -50,6 +57,14 @@ class DragIndicatorPlugin {
 		if this.ActiveButton != ""
 			return
 
+		if this.Visible {
+			this.Hide()
+			this.DestroySurface()
+		}
+
+		this.Fading := false
+		this.FadeStartTick := 0
+		this.Opacity := 255
 		this.ActiveButton := button
 		this.StartX := state.X
 		this.StartY := state.Y
@@ -60,15 +75,18 @@ class DragIndicatorPlugin {
 
 	static MouseUp(button, state) {
 		if button = this.ActiveButton
-			this.Reset()
+			this.EndDrag()
 	}
 
 	static Tick(state) {
-		if this.ActiveButton = ""
+		if this.ActiveButton = "" {
+			if this.Fading
+				this.TickFade()
 			return
+		}
 
 		if !state.IsButtonDown(this.ActiveButton) {
-			this.Reset()
+			this.EndDrag()
 			return
 		}
 
@@ -179,7 +197,7 @@ class DragIndicatorPlugin {
 		this.DrawSolidLine(pen, ex, ey, leftArrowX, leftArrowY)
 		this.DrawSolidLine(pen, ex, ey, rightArrowX, rightArrowY)
 
-		this.Present(left, top, width, height)
+		this.Present(left, top, width, height, 255)
 	}
 
 	static DrawSolidLine(pen, x1, y1, x2, y2) {
@@ -268,7 +286,7 @@ class DragIndicatorPlugin {
 		this.CapacityHeight := newHeight
 	}
 
-	static Present(x, y, width, height) {
+	static Present(x, y, width, height, opacity := 255) {
 		dst := Buffer(8, 0)
 		NumPut("Int", x, dst, 0)
 		NumPut("Int", y, dst, 4)
@@ -281,7 +299,7 @@ class DragIndicatorPlugin {
 		blend := Buffer(4, 0)
 		NumPut("UChar", 0, blend, 0)
 		NumPut("UChar", 0, blend, 1)
-		NumPut("UChar", 255, blend, 2)
+		NumPut("UChar", opacity, blend, 2)
 		NumPut("UChar", 1, blend, 3)
 
 		ok := DllCall(
@@ -317,6 +335,55 @@ class DragIndicatorPlugin {
 		)
 
 		this.Visible := true
+		this.Opacity := opacity
+		this.LastPresentX := x
+		this.LastPresentY := y
+		this.LastPresentWidth := width
+		this.LastPresentHeight := height
+	}
+
+	static EndDrag() {
+		this.ActiveButton := ""
+		this.LastRenderTick := 0
+
+		if !this.Visible {
+			this.Reset()
+			return
+		}
+
+		if SmartKeyPressTheme.FadeDuration <= 0 {
+			this.Reset()
+			return
+		}
+
+		this.FadeStartTick := A_TickCount
+		this.Fading := true
+	}
+
+	static TickFade() {
+		if !this.Visible {
+			this.Reset()
+			return
+		}
+
+		elapsed := A_TickCount - this.FadeStartTick
+		if elapsed >= SmartKeyPressTheme.FadeDuration {
+			this.Reset()
+			return
+		}
+
+		opacity := Round(255 * (1 - elapsed / SmartKeyPressTheme.FadeDuration))
+		opacity := Max(0, Min(255, opacity))
+
+		if opacity != this.Opacity {
+			this.Present(
+				this.LastPresentX,
+				this.LastPresentY,
+				this.LastPresentWidth,
+				this.LastPresentHeight,
+				opacity
+			)
+		}
 	}
 
 	static Hide() {
@@ -329,6 +396,13 @@ class DragIndicatorPlugin {
 		this.Hide()
 		this.DestroySurface()
 		this.ActiveButton := ""
+		this.Fading := false
+		this.FadeStartTick := 0
+		this.Opacity := 255
+		this.LastPresentX := 0
+		this.LastPresentY := 0
+		this.LastPresentWidth := 0
+		this.LastPresentHeight := 0
 		this.StartX := 0
 		this.StartY := 0
 		this.LastEndX := -2147483648
