@@ -5,6 +5,7 @@ class ClickRipplesPlugin {
 	static Enabled := true
 	static ScopeMode := "" ; empty = inherit SmartAppScope.Mode
 	static PauseWhileTyping := true
+	static RequireClientArea := true
 
 	static Lifetime := 650
 	static MaxRadius := 52

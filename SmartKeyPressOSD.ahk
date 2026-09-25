@@ -7,10 +7,12 @@
 
 #Include Core\SharedTheme.ahk
 #Include Core\GDIPlusHost.ahk
+#Include Core\DpiContext.ahk
 #Include Core\InputActivity.ahk
 #Include Core\InputState.ahk
 #Include Core\AppScope.ahk
 #Include Core\ProfileManager.ahk
+#Include Core\DisplayScope.ahk
 #Include Core\TrayController.ahk
 #Include Core\PluginManager.ahk
 
@@ -39,20 +41,33 @@ SmartTrayController.Init()
 GDIPlusHost.Init()
 OnExit(ShutdownApplication)
 
-PluginManager.Init()
+pluginDpiContext := SmartDpiContext.EnterPerMonitor()
+try {
+	PluginManager.Init()
+} finally {
+	SmartDpiContext.Restore(pluginDpiContext)
+}
+
 SetTimer(AppTick, APP_POLL_INTERVAL)
 
 AppTick() {
 	global AppState
 
-	AppState.Update()
+	previousDpiContext := SmartDpiContext.EnterPerMonitor()
 
-	; Profiles need foreground/hover process context even when AppScope itself is
-	; disabled, so AppScope resolves process names whenever profiles are enabled.
-	SmartAppScope.Update(AppState, SmartProfileManager.Enabled)
-	SmartProfileManager.Update(AppState)
-	SmartTrayController.Update(AppState)
-	PluginManager.Process(AppState)
+	try {
+		AppState.Update()
+
+		; Profiles need foreground/hover process context even when AppScope itself is
+		; disabled, so AppScope resolves process names whenever profiles are enabled.
+		SmartAppScope.Update(AppState, SmartProfileManager.Enabled)
+		SmartProfileManager.Update(AppState)
+		SmartDisplayScope.Update(AppState)
+		SmartTrayController.Update(AppState)
+		PluginManager.Process(AppState)
+	} finally {
+		SmartDpiContext.Restore(previousDpiContext)
+	}
 }
 
 ShutdownApplication(*) {

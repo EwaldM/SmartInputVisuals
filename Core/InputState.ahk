@@ -27,6 +27,7 @@ class SmartInputState {
 	HoverAllowed := true
 	FocusAllowed := true
 	ScopeAllowed := true
+	DisplayAllowed := true
 
 	ProfileName := ""
 	ProfileProcess := ""

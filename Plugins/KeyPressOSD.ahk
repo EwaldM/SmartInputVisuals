@@ -5,6 +5,7 @@ class KeyPressOSDPlugin {
 	static Enabled := true
 	static ScopeMode := "" ; empty = inherit SmartAppScope.Mode
 	static PauseWhileTyping := true
+	static RequireClientArea := true
 
 	static HoldDelay := 700
 	static OffsetX := 30

@@ -4,6 +4,7 @@
 ;     static Enabled := true
 ;     static ScopeMode := ""          ; empty = inherit SmartAppScope.Mode
 ;     static PauseWhileTyping := true
+;     static RequireClientArea := true ; pointer-driven visualisations
 ;
 ; Optional callbacks:
 ;     Init()
@@ -132,6 +133,14 @@ class PluginManager {
 				return "AppScope"
 		} catch Error as err {
 			this.Disable(record, "scope evaluation", err)
+			return "Error"
+		}
+
+		try {
+			if !SmartDisplayScope.IsPluginAllowed(record.Plugin, state)
+				return "DisplayScope"
+		} catch Error as err {
+			this.Disable(record, "display scope evaluation", err)
 			return "Error"
 		}
 

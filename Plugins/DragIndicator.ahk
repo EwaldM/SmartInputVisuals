@@ -5,6 +5,7 @@ class DragIndicatorPlugin {
 	static Enabled := true
 	static ScopeMode := ""
 	static PauseWhileTyping := true
+	static RequireClientArea := true
 
 	static DragThreshold := 6
 	static StrokeWidth := 3.0

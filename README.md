@@ -32,6 +32,8 @@ SmartKeyPressOSD/
 ├─ LICENSE.md
 ├─ Core/
 │  ├─ AppScope.ahk
+│  ├─ DisplayScope.ahk
+│  ├─ DpiContext.ahk
 │  ├─ GDIPlusHost.ahk
 │  ├─ InputActivity.ahk
 │  ├─ InputState.ahk
@@ -188,6 +190,22 @@ Plugins may override the global mode with `static ScopeMode := "..."`. `PointerH
 
 Process names are cached and are resolved again only when the relevant window handle changes. SmartKeyPressOSD's own topmost click-through windows are skipped when resolving the application beneath the pointer.
 
+### Client-area display restriction
+
+`Core/DisplayScope.ahk` applies a separate display rule to pointer-driven visualisations. It is enabled by default and requires the pointer to be inside the selected application's interactive client area. Standard title bars and window borders are excluded without changing which application profile is selected.
+
+```ahk
+static Enabled := true
+```
+
+The included visual plugins opt in with `static RequireClientArea := true`. Focus-based profile selection remains unchanged: the focused application's profile can stay selected while the pointer moves, but its pointer-driven visuals are suppressed unless the pointer is inside that selected application's interactive client area. The check combines the Windows client rectangle with `WM_NCHITTEST`, so custom title bars that are drawn inside the client rectangle but report a non-client hit-test result are excluded as well.
+
+The inexpensive client-rectangle test runs every host tick. `WM_NCHITTEST` is cached and refreshed immediately when the hovered window changes; within the same window it refreshes only after the pointer has moved at least 3 pixels and at least 50 ms have elapsed. This caps cross-window hit testing at about 20 calls per second while the pointer moves. Its timeout is limited to 5 ms; if the target application does not answer in time, the already-established client-rectangle result is used.
+
+### Mixed-DPI displays
+
+`Core/DpiContext.ahk` temporarily switches visual-plugin initialisation and each complete host tick to per-monitor DPI awareness. Pointer sampling, application/window geometry, display-scope checks, layered-window creation and plugin positioning therefore use one consistent physical-pixel coordinate space, including on mixed-DPI multi-monitor setups and monitors with negative screen coordinates. The previous thread DPI context is restored immediately afterwards, so SmartKeyPressOSD does not globally change AutoHotkey's DPI behaviour or the tray menu. On Windows versions where the thread DPI API is unavailable, the helper safely falls back to the normal AutoHotkey DPI context.
+
 ## Application-specific profiles
 
 Profiles control **which plugins are enabled for particular applications**. This is independent of application scope: profiles choose a plugin set, while `AppScope` controls where a plugin is permitted to display.
@@ -208,7 +226,7 @@ Supported selection modes:
 
 For every selected application, an application-specific profile is used when one is registered; otherwise the `Default` profile is used immediately. This means moving the pointer from a profiled application to an unprofiled application switches to the Default profile without requiring a focus change.
 
-`Profiles/Default.ahk` defines the fallback plugin set and enables only `KeyPressOSD`. `Profiles/AppProfiles.ahk` contains the application-specific profiles.
+`Profiles/Default.ahk` defines the fallback plugin set and enables only `KeyPressOSD`. `Profiles/AppProfiles.ahk` contains disabled example profiles which can be enabled or adapted.
 
 Example profile definition:
 
@@ -225,7 +243,7 @@ class PowerPointProfile {
 }
 ```
 
-Plugin names omitted from an application-specific profile fall back to the corresponding setting in the Default profile. Executable names are matched case-insensitively. Duplicate executable mappings are rejected during startup.
+Each application-specific profile has an explicit `static Enabled := true/false` switch. Plugin names omitted from a profile fall back to the corresponding setting in the Default profile. Executable names are matched case-insensitively. Duplicate executable mappings are rejected during startup.
 
 ### Per-profile DragIndicator toggle
 
@@ -315,6 +333,8 @@ The architecture avoids unnecessary work by:
 - calling `WantsTick()` only after all eligibility checks pass;
 - using persistent input state instead of per-tick Maps;
 - caching application process names;
+- using a lightweight client-area check every tick and throttling `WM_NCHITTEST` to at most about 20 refreshes per second while the pointer moves;
+- switching DPI awareness once per host tick and restoring it afterwards, keeping mixed-DPI coordinates consistent without changing global script DPI behaviour;
 - using `SetWindowPos()` for unchanged moving visuals where possible;
 - redrawing `PointerHalo` only when its style/opacity changes;
 - ticking `ClickRipples` only while animations are active;

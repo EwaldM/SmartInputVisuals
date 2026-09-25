@@ -5,6 +5,7 @@ class PointerHaloPlugin {
 	static Enabled := true
 	static ScopeMode := "HoverOnly"
 	static PauseWhileTyping := true
+	static RequireClientArea := true
 
 	static Diameter := 65
 	static StrokeWidth := 3.0
