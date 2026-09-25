@@ -13,6 +13,7 @@ SmartKeyPressOSD is an AutoHotkey v2 input-visualisation host with optional same
 - globally shared mouse-button colours
 - application focus/hover filtering
 - application-specific plugin profiles
+- global tray enable/disable control with zero host polling while disabled
 - pause visualisations while ordinary keyboard typing is active
 - one shared 20 ms input/presentation timer
 - central GDI+ lifetime management
@@ -144,18 +145,18 @@ The indicator does not appear until the pointer has moved at least `DragThreshol
 
 DragIndicator uses a single layered backing DIB for reliable rendering. It grows in 32-pixel blocks only when needed and is released when the drag ends, so drag memory is not retained while the plugin is idle. A very long diagonal drag can still require a temporarily large backing surface because the bitmap must cover the line's bounding rectangle.
 
-## Pause while typing
+## Visuals while typing
 
 Keyboard activity is tracked centrally by `Core/InputActivity.ahk` using a non-blocking `InputHook`.
 
 ```ahk
-static PauseWhileTyping := true
-static TypingPauseDuration := 750
+static VisualsWhileTyping := false
+static VisualDelayAfterTyping := 750
 ```
 
-Modifier-only presses (`Ctrl`, `Shift`, `Alt`, Windows keys) do not count as typing. A normal key in a combination does; for example, pressing `Ctrl` alone does not pause visualisations, while `Ctrl+C` does.
+Modifier-only presses (`Ctrl`, `Shift`, `Alt`, Windows keys) do not count as typing. A normal key in a combination does; for example, pressing `Ctrl` alone does not suppress visualisations, while `Ctrl+C` does.
 
-Pause-while-typing is the default plugin policy. While typing suppression is active, `PluginManager` does not dispatch mouse or tick callbacks to plugins. A currently visible plugin receives one `Deactivated("Typing", state)` callback so it can remove its existing visualisation, then receives no normal callbacks until it becomes eligible again.
+`VisualsWhileTyping := false` makes typing suppression the default policy. Visuals resume `VisualDelayAfterTyping` milliseconds after the last relevant key press. While typing suppression is active, `PluginManager` does not dispatch mouse or tick callbacks to plugins. A currently visible plugin receives one `Deactivated("Typing", state)` callback so it can remove its existing visualisation, then receives no normal callbacks until it becomes eligible again.
 
 A plugin which genuinely needs to remain active while typing can explicitly opt out with:
 
@@ -226,7 +227,7 @@ Supported selection modes:
 
 For every selected application/window context, an application-specific profile is used when one is registered; otherwise the `Default` profile is used immediately. This means moving the pointer from a profiled application to an unprofiled application switches to the Default profile without requiring a focus change.
 
-`Profiles/Default.ahk` defines the fallback plugin set and enables only `KeyPressOSD`. `Profiles/AppProfiles.ahk` contains ready-to-adapt examples; the PowerPoint and Excel/Word examples are disabled, while the Desktop example is enabled by default.
+`Profiles/Default.ahk` defines the fallback plugin defaults and enables only `ClickRipples` by default. `Profiles/AppProfiles.ahk` contains ready-to-adapt examples; the PowerPoint and Excel/Word examples are disabled, while the Desktop example is enabled by default.
 
 Example profile definition:
 
@@ -244,7 +245,7 @@ class PowerPointProfile {
 }
 ```
 
-An application-specific profile is enabled when `Enabled` is omitted; add `static Enabled := false` to disable it. This makes commenting out that line a convenient way to enable an example profile. Plugin names omitted from an application-specific profile inherit the corresponding setting from the Default profile. Simple `Applications` entries are executable-name strings matched case-insensitively. A class-specific entry can instead use `Map("Process", "...", "Class", "...")`; it takes precedence over a process-only mapping for the same executable. Duplicate process-only mappings and duplicate process/class mappings are rejected during startup.
+An application-specific profile is enabled when `Enabled` is omitted; add `static Enabled := false` to disable it. This makes commenting out that line a convenient way to enable an example profile. All registered plugins are available to every profile; each `Plugins` value is the default active state for that profile. Plugin names omitted from an application-specific profile inherit the corresponding setting from the Default profile. Simple `Applications` entries are executable-name strings matched case-insensitively. A class-specific entry can instead use `Map("Process", "...", "Class", "...")`; it takes precedence over a process-only mapping for the same executable. Duplicate process-only mappings and duplicate process/class mappings are rejected during startup.
 
 For example, a Desktop-only profile can distinguish Windows Desktop windows from ordinary File Explorer windows even though both use `explorer.exe`:
 
@@ -267,7 +268,7 @@ class DesktopProfile {
 SmartProfileManager.Register(DesktopProfile)
 ```
 
-With no separate process-only `explorer.exe` profile, ordinary File Explorer windows continue to use the `Default` profile.
+With no separate process-only `explorer.exe` profile, ordinary File Explorer windows continue to use the `Default` profile. All registered plugins are available to every profile; the `Plugins` values define their default runtime state. In this Desktop example all plugins therefore start disabled.
 
 Useful `explorer.exe` window classes for profile matching:
 
@@ -281,35 +282,40 @@ Useful `explorer.exe` window classes for profile matching:
 
 Taskbar classes are normally handled by SmartKeyPressOSD's built-in tray/taskbar exclusion rather than by application profiles.
 
-`Default.ahk` is authoritative and fail-closed: every registered plugin must have an explicit setting there. Application-specific profiles may use only plugin names known to the Default profile, so misspelled or obsolete names are reported at startup instead of being silently ignored. Entries for optional plugin files may remain in the Default profile even when those files are not installed.
+`Default.ahk` is authoritative and fail-closed: every registered plugin must have an explicit default state there. Application-specific profiles may use only plugin names known to the Default profile, so misspelled or obsolete names are reported at startup instead of being silently ignored. Entries for optional plugin files may remain in the Default profile even when those files are not installed.
 
 ### Per-profile DragIndicator toggle
 
-`DragIndicator` has an additional session-only runtime toggle in the tray menu. The toggle is stored separately for each application profile and never overrides the profile configuration itself.
+`DragIndicator` has a session-only runtime toggle in the tray menu. The toggle is stored separately for each application profile. Its initial checked state comes directly from that profile's `Plugins` value (or the inherited Default value), and a tray change overrides that default only for the current session.
 
 - Right-click the SmartKeyPressOSD tray icon and use `DragIndicator`.
 - The toggle targets the profile of the foreground application/window context. Entering the taskbar, notification area or tray popup preserves the previously captured target instead of switching the toggle to a shell profile. Desktop and File Explorer windows resolve normally.
-- When that profile permits `DragIndicator`, the menu item is enabled and its check mark shows that profile's runtime state.
-- When that profile disables `DragIndicator`, the menu item is disabled. No status message is shown.
+- When the `DragIndicator` plugin is installed, the menu item is enabled and its check mark shows the effective state for the target profile.
+- A profile value of `false` means initially unchecked, not unavailable; the tray toggle can enable it for the current session.
 - An accepted toggle briefly shows `DragIndicator: ON` or `DragIndicator: OFF` near the pointer.
 - Runtime toggle states are kept only for the current SmartKeyPressOSD session and reset when the script restarts.
 
-The tray menu contains only SmartKeyPressOSD-specific controls plus Exit; AutoHotkey's standard `Suspend Hotkeys` and `Pause Script` items are intentionally removed because they do not control plugins.
+### Global enable toggle
 
-When a profile disables an already-visible plugin, the manager sends one `Deactivated("Profile", state)` callback so the plugin can clear its visualisation, then stops dispatching normal callbacks to it. If a permitted `DragIndicator` is switched off with the runtime toggle, it receives `Deactivated("RuntimeToggle", state)` and is likewise skipped until that profile's runtime toggle is enabled again.
+The tray menu also provides `Enabled` as the global master switch, independent of application profiles. Unchecking it immediately clears active visualisations, stops the shared 20 ms host timer and stops keyboard-activity tracking. The tray menu remains available so SmartKeyPressOSD can be re-enabled. When re-enabled, physical mouse-button state is resynchronised before polling restarts to avoid artificial button transitions.
+
+The `Enabled` item is checked while SmartKeyPressOSD is active and unchecked while it is paused. Startup behaviour is configurable in `Core/TrayController.ahk` with `static ActiveByDefault := true`; set it to `false` to start paused/unchecked. Plugin toggles appear before the global switch. While globally paused, plugin toggles are disabled but keep their checked states, and the tray icon tooltip shows `SmartKeyPressOSD (Paused)`. Re-enabling SmartKeyPressOSD restores the same per-profile plugin states.
+
+The tray menu groups per-profile plugin toggles first, then the global `Enabled` master switch, followed by Exit. AutoHotkey's standard `Suspend Hotkeys` and `Pause Script` entries are intentionally removed in favour of these SmartKeyPressOSD-specific controls.
+
+When a profile default disables an already-visible plugin, the manager sends one `Deactivated("Profile", state)` callback so the plugin can clear its visualisation, then stops dispatching normal callbacks to it. If `DragIndicator` is switched off with the runtime toggle, it receives `Deactivated("RuntimeToggle", state)` and is likewise skipped until that profile's runtime toggle is enabled again.
 
 ## Plugin eligibility and lifecycle
 
 The manager applies eligibility centrally in this order:
 
 1. taskbar/notification-area exclusion
-2. active application profile
-3. per-profile runtime toggle
-4. focus/hover application scope
-5. client-area display scope
-6. pause-while-typing policy
+2. effective per-profile plugin state (profile default plus any session override)
+3. focus/hover application scope
+4. client-area display scope
+5. pause-while-typing policy
 
-Plugin availability is configured through profiles rather than a second plugin-level `Enabled` switch. A plugin which is disabled by the Default profile and by every enabled application-specific profile is not initialised at startup. If a plugin callback throws an error, only that plugin is marked unhealthy, shut down and removed from further dispatch; the other plugins continue running.
+All registered plugins are initialised at startup. Profiles define their default active state rather than plugin availability, and the current `DragIndicator` tray toggle can override its profile default for the session. If a plugin callback throws an error, only that plugin is marked unhealthy, shut down and removed from further dispatch; the other plugins continue running.
 
 For profile, runtime-toggle, scope or typing transitions, an active plugin may receive one `Deactivated(reason, state)` cleanup callback. Once blocked, it receives no `WantsTick`, `Tick`, `MouseDown` or `MouseUp` calls.
 

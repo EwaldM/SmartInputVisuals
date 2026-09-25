@@ -2,8 +2,8 @@
 ; Uses one non-blocking InputHook to detect ordinary keyboard activity centrally.
 
 class SmartInputActivity {
-	static PauseWhileTyping := true
-	static TypingPauseDuration := 750
+	static VisualsWhileTyping := false
+	static VisualDelayAfterTyping := 750
 
 	static Hook := 0
 	static LastTypingTick := 0
@@ -46,9 +46,9 @@ class SmartInputActivity {
 	}
 
 	static IsTypingActive(now := A_TickCount) {
-		if !this.PauseWhileTyping || !this.LastTypingTick
+		if this.VisualsWhileTyping || !this.LastTypingTick
 			return false
 
-		return (now - this.LastTypingTick) < this.TypingPauseDuration
+		return (now - this.LastTypingTick) < this.VisualDelayAfterTyping
 	}
 }

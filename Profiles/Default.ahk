@@ -4,9 +4,9 @@
 class SmartDefaultProfile {
 	static Name := "Default"
 	static Plugins := Map(
-		"KeyPressOSD", true,
+		"KeyPressOSD", false,
 		"PointerHalo", false,
-		"ClickRipples", false,
+		"ClickRipples", true,
 		"DragIndicator", false
 	)
 }

@@ -1,40 +1,50 @@
 ; SmartKeyPressOSD - tray interaction and lightweight status feedback
-; DragIndicator can be toggled per application profile for the current session.
+; Provides a global host enable toggle and a per-profile DragIndicator toggle.
 
 class SmartTrayController {
 	static DragIndicatorItem := "DragIndicator"
+	static EnabledItem := "Enabled"
 	static ExitItem := "Exit SmartKeyPressOSD"
 	static FeedbackDuration := 800
 	static FeedbackTooltipId := 20
+	static ActiveByDefault := true ; false starts SmartKeyPressOSD globally paused
 
 	static Initialised := false
 	static TargetProfile := 0
 	static ToggleCallback := 0
+	static PauseCallback := 0
+	static EnabledMenuCallback := 0
 	static ExitCallback := 0
 	static HideFeedbackCallback := 0
 	static LastProfileKey := ""
 	static LastAvailable := -1
 	static LastRuntimeEnabled := -1
+	static Paused := false
 
-	static Init() {
+	static Init(pauseCallback) {
 		if this.Initialised
 			return
 
 		this.Initialised := true
+		this.Paused := !this.ActiveByDefault
+		this.PauseCallback := pauseCallback
 		this.ToggleCallback := ObjBindMethod(this, "ToggleDragIndicator")
+		this.EnabledMenuCallback := ObjBindMethod(this, "ToggleEnabled")
 		this.ExitCallback := ObjBindMethod(this, "ExitApplication")
 		this.HideFeedbackCallback := ObjBindMethod(this, "HideFeedback")
 
-		; Remove AutoHotkey's standard tray commands such as "Suspend Hotkeys".
-		; SmartKeyPressOSD has no tray hotkey toggle, so leaving those entries in
-		; place is misleading next to the profile-aware DragIndicator control.
+		; Remove AutoHotkey's standard tray commands and expose only controls
+		; whose behaviour is owned by SmartKeyPressOSD itself.
 		A_TrayMenu.Delete()
 		A_TrayMenu.Add(this.DragIndicatorItem, this.ToggleCallback)
+		A_TrayMenu.Add()
+		A_TrayMenu.Add(this.EnabledItem, this.EnabledMenuCallback)
 		A_TrayMenu.Add()
 		A_TrayMenu.Add(this.ExitItem, this.ExitCallback)
 		A_IconTip := "SmartKeyPressOSD"
 
 		this.Refresh(true)
+		this.RefreshEnabled()
 	}
 
 	static Update(state) {
@@ -74,18 +84,45 @@ class SmartTrayController {
 		this.ShowFeedback(enabled)
 	}
 
+	static ToggleEnabled(*) {
+		if !this.PauseCallback
+			return
+
+		paused := !this.Paused
+
+		try this.PauseCallback.Call(paused)
+		catch Error as err {
+			OutputDebug("SmartKeyPressOSD pause toggle error: " err.Message)
+			return
+		}
+
+		this.Paused := paused
+		if paused
+			this.HideFeedback()
+
+		this.RefreshEnabled()
+		this.Refresh(true)
+	}
+
+	static RefreshEnabled() {
+		if this.Paused {
+			A_TrayMenu.Uncheck(this.EnabledItem)
+			A_IconTip := "SmartKeyPressOSD (Paused)"
+		} else {
+			A_TrayMenu.Check(this.EnabledItem)
+			A_IconTip := "SmartKeyPressOSD"
+		}
+	}
+
 	static Refresh(force := false) {
 		profileKey := SmartProfileManager.GetProfileKey(this.TargetProfile)
 		available := false
 		runtimeEnabled := false
 
 		if this.TargetProfile {
-			available := SmartProfileManager.IsPluginAvailableForProfile(
-				this.TargetProfile,
-				"DragIndicator"
-			)
+			available := SmartProfileManager.IsPluginRegistered("DragIndicator")
 			if available {
-				runtimeEnabled := SmartProfileManager.IsPluginRuntimeEnabledForProfile(
+				runtimeEnabled := SmartProfileManager.IsPluginEnabledForProfile(
 					this.TargetProfile,
 					"DragIndicator"
 				)
@@ -99,11 +136,15 @@ class SmartTrayController {
 			return
 
 		if available {
-			A_TrayMenu.Enable(this.DragIndicatorItem)
 			if runtimeEnabled
 				A_TrayMenu.Check(this.DragIndicatorItem)
 			else
 				A_TrayMenu.Uncheck(this.DragIndicatorItem)
+
+			if this.Paused
+				A_TrayMenu.Disable(this.DragIndicatorItem)
+			else
+				A_TrayMenu.Enable(this.DragIndicatorItem)
 		} else {
 			A_TrayMenu.Uncheck(this.DragIndicatorItem)
 			A_TrayMenu.Disable(this.DragIndicatorItem)
@@ -164,6 +205,7 @@ class SmartTrayController {
 		if this.HideFeedbackCallback
 			SetTimer(this.HideFeedbackCallback, 0)
 		this.HideFeedback()
+		this.PauseCallback := 0
 		this.Initialised := false
 	}
 }

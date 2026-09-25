@@ -1,5 +1,5 @@
 ; SmartKeyPressOSD - application-specific plugin profiles
-; Profiles select plugin sets according to the focused and/or hovered window context.
+; Profiles select default plugin states according to the focused and/or hovered window context.
 
 class SmartProfileManager {
 	static SelectionMode := "HoverThenFocus"
@@ -8,6 +8,7 @@ class SmartProfileManager {
 	static ProcessProfiles := Map()
 	static WindowProfiles := Map()
 	static RuntimePluginStates := Map()
+	static RegisteredPlugins := Map()
 	static DefaultProfile := 0
 	static ActiveProfile := 0
 
@@ -25,6 +26,10 @@ class SmartProfileManager {
 		this.ProcessProfiles.Clear()
 		this.WindowProfiles.Clear()
 		this.RuntimePluginStates.Clear()
+		this.RegisteredPlugins.Clear()
+		for pluginName in registeredPluginNames
+			this.RegisteredPlugins[StrLower(Trim(pluginName))] := true
+
 		this.ValidateSelectionMode(this.SelectionMode)
 		this.ValidatePluginConfiguration(registeredPluginNames)
 
@@ -122,22 +127,26 @@ class SmartProfileManager {
 		state.ProfileProcess := processName
 	}
 
-	static IsPluginAvailable(pluginName) {
-		return this.IsPluginAvailableForProfile(this.ActiveProfile, pluginName)
+	static IsPluginRegistered(pluginName) {
+		return this.RegisteredPlugins.Has(StrLower(Trim(pluginName)))
 	}
 
-	static IsPluginConfiguredAnywhere(pluginName) {
-		for profile in this.Profiles {
-			if profile != this.DefaultProfile && !this.IsProfileEnabled(profile)
-				continue
-			if this.IsPluginAvailableForProfile(profile, pluginName)
-				return true
-		}
-
-		return false
+	static IsPluginEnabled(pluginName) {
+		return this.IsPluginEnabledForProfile(this.ActiveProfile, pluginName)
 	}
 
-	static IsPluginAvailableForProfile(profile, pluginName) {
+	static IsPluginEnabledForProfile(profile, pluginName) {
+		if !profile || !this.IsPluginRegistered(pluginName)
+			return false
+
+		runtimeMap := this.GetRuntimePluginMap(profile, false)
+		if runtimeMap && runtimeMap.Has(pluginName)
+			return !!runtimeMap[pluginName]
+
+		return this.GetPluginDefaultStateForProfile(profile, pluginName)
+	}
+
+	static GetPluginDefaultStateForProfile(profile, pluginName) {
 		if !profile
 			return false
 
@@ -155,30 +164,25 @@ class SmartProfileManager {
 		return false
 	}
 
-	static IsPluginRuntimeEnabled(pluginName) {
-		return this.IsPluginRuntimeEnabledForProfile(this.ActiveProfile, pluginName)
+	static HasRuntimePluginState(pluginName) {
+		return this.HasRuntimePluginStateForProfile(this.ActiveProfile, pluginName)
 	}
 
-	static IsPluginRuntimeEnabledForProfile(profile, pluginName) {
+	static HasRuntimePluginStateForProfile(profile, pluginName) {
 		if !profile
 			return false
 
 		runtimeMap := this.GetRuntimePluginMap(profile, false)
-		if !runtimeMap || !runtimeMap.Has(pluginName)
-			return true
-
-		return !!runtimeMap[pluginName]
+		return !!(runtimeMap && runtimeMap.Has(pluginName))
 	}
 
 	static TogglePluginForProfile(profile, pluginName, &enabled) {
 		enabled := false
 
-		if !profile
-			return false
-		if !this.IsPluginAvailableForProfile(profile, pluginName)
+		if !profile || !this.IsPluginRegistered(pluginName)
 			return false
 
-		enabled := !this.IsPluginRuntimeEnabledForProfile(profile, pluginName)
+		enabled := !this.IsPluginEnabledForProfile(profile, pluginName)
 		runtimeMap := this.GetRuntimePluginMap(profile, true)
 		runtimeMap[pluginName] := enabled
 		return true

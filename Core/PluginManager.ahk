@@ -54,8 +54,6 @@ class PluginManager {
 		for record in this.Plugins {
 			if !record.Healthy
 				continue
-			if !SmartProfileManager.IsPluginConfiguredAnywhere(record.Name)
-				continue
 
 			record.Initialised := true
 
@@ -133,16 +131,35 @@ class PluginManager {
 		}
 	}
 
+	static DeactivateAll(reason, state) {
+		if !this.Initialised
+			return
+
+		for record in this.Plugins {
+			if !record.Initialised || !record.Healthy || !record.Active
+				continue
+
+			this.Deactivate(record, reason, state)
+		}
+	}
+
+	static SynchroniseInputState(state) {
+		this.PreviousLeftM := state.LeftM
+		this.PreviousMiddleM := state.MiddleM
+		this.PreviousRightM := state.RightM
+	}
+
 	static GetBlockReason(record, state) {
 		; Never draw over the Windows taskbar/notification area. In particular,
 		; tray-icon clicks must not produce OSD text, ripples, halos or drag visuals.
 		if state.HoverIsTraySurface
 			return "TraySurface"
 
-		if !SmartProfileManager.IsPluginAvailable(record.Name)
+		if !SmartProfileManager.IsPluginEnabled(record.Name) {
+			if SmartProfileManager.HasRuntimePluginState(record.Name)
+				return "RuntimeToggle"
 			return "Profile"
-		if !SmartProfileManager.IsPluginRuntimeEnabled(record.Name)
-			return "RuntimeToggle"
+		}
 
 		try {
 			if !SmartAppScope.IsPluginAllowed(record.Plugin, state)

@@ -32,12 +32,15 @@ CoordMode("Mouse", "Screen")
 CoordMode("ToolTip", "Screen")
 
 APP_POLL_INTERVAL := 20
+ApplicationPaused := false
 AppState := SmartInputState()
 
-SmartInputActivity.Init()
 SmartAppScope.Init()
 SmartProfileManager.Init(PluginManager.GetRegisteredPluginNames())
-SmartTrayController.Init()
+SmartTrayController.Init(SetApplicationPaused)
+ApplicationPaused := SmartTrayController.Paused
+if !ApplicationPaused
+	SmartInputActivity.Init()
 GDIPlusHost.Init()
 OnExit(ShutdownApplication)
 
@@ -48,7 +51,8 @@ try {
 	SmartDpiContext.Restore(pluginDpiContext)
 }
 
-SetTimer(AppTick, APP_POLL_INTERVAL)
+if !ApplicationPaused
+	SetTimer(AppTick, APP_POLL_INTERVAL)
 
 AppTick() {
 	global AppState
@@ -67,6 +71,37 @@ AppTick() {
 	} finally {
 		SmartDpiContext.Restore(previousDpiContext)
 	}
+}
+
+SetApplicationPaused(paused) {
+	global ApplicationPaused, AppState, APP_POLL_INTERVAL
+
+	paused := !!paused
+	if paused = ApplicationPaused
+		return
+
+	ApplicationPaused := paused
+
+	if paused {
+		SetTimer(AppTick, 0)
+		PluginManager.DeactivateAll("Paused", AppState)
+		SmartInputActivity.Shutdown()
+		return
+	}
+
+	SmartInputActivity.Init()
+
+	; Resynchronise physical button state before polling resumes so pausing does
+	; not create artificial mouse transitions when the host becomes active again.
+	previousDpiContext := SmartDpiContext.EnterPerMonitor()
+	try {
+		AppState.Update()
+		PluginManager.SynchroniseInputState(AppState)
+	} finally {
+		SmartDpiContext.Restore(previousDpiContext)
+	}
+
+	SetTimer(AppTick, APP_POLL_INTERVAL)
 }
 
 ShutdownApplication(*) {

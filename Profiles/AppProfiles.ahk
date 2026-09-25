@@ -9,8 +9,9 @@
 ; names and window classes are matched case-insensitively. A class-specific match
 ; takes precedence over a process-only match for the same executable.
 ;
-; Plugin names must match an entry in Default.ahk. A profile may omit plugin names;
-; omitted settings inherit the corresponding value from the Default profile.
+; Plugin names must match an entry in Default.ahk. All registered plugins are available
+; to every profile. The true/false values in Plugins define each profile's default runtime
+; state. A profile may omit plugin names; omitted settings inherit the Default profile value.
 ;
 ; Keep application-specific configuration here rather than in the plugins so
 ; visual plugins remain reusable and profile selection stays centralised.
@@ -21,8 +22,9 @@
 ; different windows share one process, such as the Desktop and File Explorer.
 ;
 ; The Desktop example below is enabled by leaving its Enabled setting commented out;
-; uncomment the line to disable it. The PowerPoint and Excel/Word examples are disabled
-; by default. Copy, rename or adapt these examples as required.
+; uncomment the line to disable it. All Desktop plugin defaults are off. The PowerPoint
+; and Excel/Word examples are disabled by default.
+; Copy, rename or adapt these examples as required.
 
 class DesktopProfile {
 	; static Enabled := false
