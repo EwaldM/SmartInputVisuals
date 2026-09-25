@@ -1,4 +1,4 @@
-; SmartKeyPressOSD - temporary per-monitor DPI context
+; SmartInputVisuals - temporary per-monitor DPI context
 ; Keeps pointer, window and layered-window coordinates in physical screen pixels.
 
 class SmartDpiContext {

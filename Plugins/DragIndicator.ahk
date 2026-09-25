@@ -1,4 +1,4 @@
-; SmartKeyPressOSD plugin: DragIndicator
+; SmartInputVisuals plugin: DragIndicator
 ; Shows a straight dashed drag line with an arrowhead at the current position.
 
 class DragIndicatorPlugin {
@@ -115,7 +115,7 @@ class DragIndicatorPlugin {
 	}
 
 	static CreatePens() {
-		for button, colour in SmartKeyPressTheme.MouseColors {
+		for button, colour in SmartInputVisualsTheme.MouseColors {
 			dashed := this.CreatePen(colour)
 			status := DllCall(
 				"gdiplus\GdipSetPenDashStyle",
@@ -348,7 +348,7 @@ class DragIndicatorPlugin {
 			return
 		}
 
-		if SmartKeyPressTheme.FadeDuration <= 0 {
+		if SmartInputVisualsTheme.FadeDuration <= 0 {
 			this.Reset()
 			return
 		}
@@ -364,12 +364,12 @@ class DragIndicatorPlugin {
 		}
 
 		elapsed := A_TickCount - this.FadeStartTick
-		if elapsed >= SmartKeyPressTheme.FadeDuration {
+		if elapsed >= SmartInputVisualsTheme.FadeDuration {
 			this.Reset()
 			return
 		}
 
-		opacity := Round(255 * (1 - elapsed / SmartKeyPressTheme.FadeDuration))
+		opacity := Round(255 * (1 - elapsed / SmartInputVisualsTheme.FadeDuration))
 		opacity := Max(0, Min(255, opacity))
 
 		if opacity != this.Opacity {

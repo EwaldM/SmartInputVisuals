@@ -1,13 +1,13 @@
-; SmartKeyPressOSD - tray interaction and lightweight status feedback
+; SmartInputVisuals - tray interaction and lightweight status feedback
 ; Provides a global host enable toggle and a per-profile DragIndicator toggle.
 
 class SmartTrayController {
 	static DragIndicatorItem := "DragIndicator"
 	static EnabledItem := "Enabled"
-	static ExitItem := "Exit SmartKeyPressOSD"
+	static ExitItem := "Exit SmartInputVisuals"
 	static FeedbackDuration := 800
 	static FeedbackTooltipId := 20
-	static ActiveByDefault := true ; false starts SmartKeyPressOSD globally paused
+	static ActiveByDefault := true ; false starts SmartInputVisuals globally paused
 
 	static Initialised := false
 	static TargetProfile := 0
@@ -34,14 +34,14 @@ class SmartTrayController {
 		this.HideFeedbackCallback := ObjBindMethod(this, "HideFeedback")
 
 		; Remove AutoHotkey's standard tray commands and expose only controls
-		; whose behaviour is owned by SmartKeyPressOSD itself.
+		; whose behaviour is owned by SmartInputVisuals itself.
 		A_TrayMenu.Delete()
 		A_TrayMenu.Add(this.DragIndicatorItem, this.ToggleCallback)
 		A_TrayMenu.Add()
 		A_TrayMenu.Add(this.EnabledItem, this.EnabledMenuCallback)
 		A_TrayMenu.Add()
 		A_TrayMenu.Add(this.ExitItem, this.ExitCallback)
-		A_IconTip := "SmartKeyPressOSD"
+		A_IconTip := "SmartInputVisuals"
 
 		this.Refresh(true)
 		this.RefreshEnabled()
@@ -53,7 +53,7 @@ class SmartTrayController {
 
 		; The tray toggle targets the foreground window's profile. Preserve the
 		; previously captured target only while Windows temporarily activates the
-		; taskbar/tray, a popup menu, or a SmartKeyPressOSD-owned helper window.
+		; taskbar/tray, a popup menu, or a SmartInputVisuals-owned helper window.
 		; Desktop and File Explorer windows resolve normally, including optional
 		; process + window-class profile mappings.
 		if state.ActiveProcess != "" && !this.ShouldPreserveTarget(
@@ -92,7 +92,7 @@ class SmartTrayController {
 
 		try this.PauseCallback.Call(paused)
 		catch Error as err {
-			OutputDebug("SmartKeyPressOSD pause toggle error: " err.Message)
+			OutputDebug("SmartInputVisuals pause toggle error: " err.Message)
 			return
 		}
 
@@ -107,10 +107,10 @@ class SmartTrayController {
 	static RefreshEnabled() {
 		if this.Paused {
 			A_TrayMenu.Uncheck(this.EnabledItem)
-			A_IconTip := "SmartKeyPressOSD (Paused)"
+			A_IconTip := "SmartInputVisuals (Paused)"
 		} else {
 			A_TrayMenu.Check(this.EnabledItem)
-			A_IconTip := "SmartKeyPressOSD"
+			A_IconTip := "SmartInputVisuals"
 		}
 	}
 

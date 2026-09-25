@@ -1,8 +1,8 @@
-# SmartKeyPressOSD
+# SmartInputVisuals
 
 [![Licence: CC BY 4.0](https://img.shields.io/badge/Licence-CC_BY_4.0-lightgrey.svg)](https://creativecommons.org/licenses/by/4.0/)
 
-SmartKeyPressOSD is an AutoHotkey v2 input-visualisation host with optional same-process plugins for text OSD, pointer highlighting, click ripples and drag visualisation.
+SmartInputVisuals is an AutoHotkey v2 input-visualisation host with optional same-process plugins for text OSD, pointer highlighting, click ripples and drag visualisation.
 
 ## Features
 
@@ -27,8 +27,8 @@ SmartKeyPressOSD is an AutoHotkey v2 input-visualisation host with optional same
 ## Project structure
 
 ```text
-SmartKeyPressOSD/
-├─ SmartKeyPressOSD.ahk
+SmartInputVisuals/
+├─ SmartInputVisuals.ahk
 ├─ README.md
 ├─ LICENSE.md
 ├─ Core/
@@ -56,9 +56,9 @@ SmartKeyPressOSD/
 
 1. Install AutoHotkey v2.
 2. Keep the complete directory structure together.
-3. Run `SmartKeyPressOSD.ahk`.
+3. Run `SmartInputVisuals.ahk`.
 
-To start it with Windows, place a shortcut to `SmartKeyPressOSD.ahk` in the Startup folder (`Win + R`, then `shell:startup`).
+To start it with Windows, place a shortcut to `SmartInputVisuals.ahk` in the Startup folder (`Win + R`, then `shell:startup`).
 
 ## Shared colours
 
@@ -112,11 +112,11 @@ static IdleFadeEnabled := true
 static IdleDelay := 2500
 ```
 
-After `IdleDelay` milliseconds without pointer movement, the halo fades over `SmartKeyPressTheme.IdleFadeDuration`. Moving the pointer or holding a mouse button restores full visibility immediately.
+After `IdleDelay` milliseconds without pointer movement, the halo fades over `SmartInputVisualsTheme.IdleFadeDuration`. Moving the pointer or holding a mouse button restores full visibility immediately.
 
 ## ClickRipples
 
-`Plugins/ClickRipples.ahk` creates expanding rings at each mouse-button press. The button colour comes from `SmartKeyPressTheme.MouseColors`.
+`Plugins/ClickRipples.ahk` creates expanding rings at each mouse-button press. The button colour comes from `SmartInputVisualsTheme.MouseColors`.
 
 ```ahk
 static Lifetime := 650
@@ -141,7 +141,7 @@ static UpdateInterval := 33
 static MinMovement := 2
 ```
 
-The indicator does not appear until the pointer has moved at least `DragThreshold` pixels, so ordinary clicks do not flash a line. Rendering is limited to roughly 30 FPS and movements below `MinMovement` pixels are ignored between rendered frames. After the drag ends, the final arrow line fades out over `SmartKeyPressTheme.FadeDuration` milliseconds before its backing surface is released.
+The indicator does not appear until the pointer has moved at least `DragThreshold` pixels, so ordinary clicks do not flash a line. Rendering is limited to roughly 30 FPS and movements below `MinMovement` pixels are ignored between rendered frames. After the drag ends, the final arrow line fades out over `SmartInputVisualsTheme.FadeDuration` milliseconds before its backing surface is released.
 
 DragIndicator uses a single layered backing DIB for reliable rendering. It grows in 32-pixel blocks only when needed and is released when the drag ends, so drag memory is not retained while the plugin is idle. A very long diagonal drag can still require a temporarily large backing surface because the bitmap must cover the line's bounding rectangle.
 
@@ -188,7 +188,7 @@ Plugins may override the default application scope mode with `static ScopeMode :
 
 There is no separate application allow-list in `AppScope`. Where visualisations are available is controlled by `Profiles/Default.ahk` and the enabled application-specific profiles in `Profiles/AppProfiles.ahk`.
 
-Process names and window classes are cached and are resolved again only when the relevant window handle changes. SmartKeyPressOSD's own topmost click-through windows are skipped when resolving the application beneath the pointer. Visual plugins are suppressed over Windows taskbar/notification-area surfaces, so clicking tray icons never produces SmartKeyPressOSD visualisations.
+Process names and window classes are cached and are resolved again only when the relevant window handle changes. SmartInputVisuals' own topmost click-through windows are skipped when resolving the application beneath the pointer. Visual plugins are suppressed over Windows taskbar/notification-area surfaces, so clicking tray icons never produces SmartInputVisuals visualisations.
 
 ### Client-area display restriction
 
@@ -206,7 +206,7 @@ The inexpensive client-rectangle test runs every host tick. `WM_NCHITTEST` is ca
 
 ### Mixed-DPI displays
 
-`Core/DpiContext.ahk` temporarily switches visual-plugin initialisation and each complete host tick to per-monitor DPI awareness. Pointer sampling, application/window geometry, display-scope checks, layered-window creation and plugin positioning therefore use one consistent physical-pixel coordinate space, including on mixed-DPI multi-monitor setups and monitors with negative screen coordinates. The previous thread DPI context is restored immediately afterwards, so SmartKeyPressOSD does not globally change AutoHotkey's DPI behaviour or the tray menu. On Windows versions where the thread DPI API is unavailable, the helper safely falls back to the normal AutoHotkey DPI context.
+`Core/DpiContext.ahk` temporarily switches visual-plugin initialisation and each complete host tick to per-monitor DPI awareness. Pointer sampling, application/window geometry, display-scope checks, layered-window creation and plugin positioning therefore use one consistent physical-pixel coordinate space, including on mixed-DPI multi-monitor setups and monitors with negative screen coordinates. The previous thread DPI context is restored immediately afterwards, so SmartInputVisuals does not globally change AutoHotkey's DPI behaviour or the tray menu. On Windows versions where the thread DPI API is unavailable, the helper safely falls back to the normal AutoHotkey DPI context.
 
 ## Application-specific profiles
 
@@ -280,7 +280,7 @@ Useful `explorer.exe` window classes for profile matching:
 | Primary taskbar | `Shell_TrayWnd` | Main taskbar and notification-area shell surface |
 | Secondary taskbar | `Shell_SecondaryTrayWnd` | Taskbar on additional monitors |
 
-Taskbar classes are normally handled by SmartKeyPressOSD's built-in tray/taskbar exclusion rather than by application profiles.
+Taskbar classes are normally handled by SmartInputVisuals' built-in tray/taskbar exclusion rather than by application profiles.
 
 `Default.ahk` is authoritative and fail-closed: every registered plugin must have an explicit default state there. Application-specific profiles may use only plugin names known to the Default profile, so misspelled or obsolete names are reported at startup instead of being silently ignored. Entries for optional plugin files may remain in the Default profile even when those files are not installed.
 
@@ -288,20 +288,20 @@ Taskbar classes are normally handled by SmartKeyPressOSD's built-in tray/taskbar
 
 `DragIndicator` has a session-only runtime toggle in the tray menu. The toggle is stored separately for each application profile. Its initial checked state comes directly from that profile's `Plugins` value (or the inherited Default value), and a tray change overrides that default only for the current session.
 
-- Right-click the SmartKeyPressOSD tray icon and use `DragIndicator`.
+- Right-click the SmartInputVisuals tray icon and use `DragIndicator`.
 - The toggle targets the profile of the foreground application/window context. Entering the taskbar, notification area or tray popup preserves the previously captured target instead of switching the toggle to a shell profile. Desktop and File Explorer windows resolve normally.
 - When the `DragIndicator` plugin is installed, the menu item is enabled and its check mark shows the effective state for the target profile.
 - A profile value of `false` means initially unchecked, not unavailable; the tray toggle can enable it for the current session.
 - An accepted toggle briefly shows `DragIndicator: ON` or `DragIndicator: OFF` near the pointer.
-- Runtime toggle states are kept only for the current SmartKeyPressOSD session and reset when the script restarts.
+- Runtime toggle states are kept only for the current SmartInputVisuals session and reset when the script restarts.
 
 ### Global enable toggle
 
-The tray menu also provides `Enabled` as the global master switch, independent of application profiles. Unchecking it immediately clears active visualisations, stops the shared 20 ms host timer and stops keyboard-activity tracking. The tray menu remains available so SmartKeyPressOSD can be re-enabled. When re-enabled, physical mouse-button state is resynchronised before polling restarts to avoid artificial button transitions.
+The tray menu also provides `Enabled` as the global master switch, independent of application profiles. Unchecking it immediately clears active visualisations, stops the shared 20 ms host timer and stops keyboard-activity tracking. The tray menu remains available so SmartInputVisuals can be re-enabled. When re-enabled, physical mouse-button state is resynchronised before polling restarts to avoid artificial button transitions.
 
-The `Enabled` item is checked while SmartKeyPressOSD is active and unchecked while it is paused. Startup behaviour is configurable in `Core/TrayController.ahk` with `static ActiveByDefault := true`; set it to `false` to start paused/unchecked. Plugin toggles appear before the global switch. While globally paused, plugin toggles are disabled but keep their checked states, and the tray icon tooltip shows `SmartKeyPressOSD (Paused)`. Re-enabling SmartKeyPressOSD restores the same per-profile plugin states.
+The `Enabled` item is checked while SmartInputVisuals is active and unchecked while it is paused. Startup behaviour is configurable in `Core/TrayController.ahk` with `static ActiveByDefault := true`; set it to `false` to start paused/unchecked. Plugin toggles appear before the global switch. While globally paused, plugin toggles are disabled but keep their checked states, and the tray icon tooltip shows `SmartInputVisuals (Paused)`. Re-enabling SmartInputVisuals restores the same per-profile plugin states.
 
-The tray menu groups per-profile plugin toggles first, then the global `Enabled` master switch, followed by Exit. AutoHotkey's standard `Suspend Hotkeys` and `Pause Script` entries are intentionally removed in favour of these SmartKeyPressOSD-specific controls.
+The tray menu groups per-profile plugin toggles first, then the global `Enabled` master switch, followed by Exit. AutoHotkey's standard `Suspend Hotkeys` and `Pause Script` entries are intentionally removed in favour of these SmartInputVisuals-specific controls.
 
 When a profile default disables an already-visible plugin, the manager sends one `Deactivated("Profile", state)` callback so the plugin can clear its visualisation, then stops dispatching normal callbacks to it. If `DragIndicator` is switched off with the runtime toggle, it receives `Deactivated("RuntimeToggle", state)` and is likewise skipped until that profile's runtime toggle is enabled again.
 
@@ -367,7 +367,7 @@ state.ProfileProcess
 
 ## Performance design
 
-SmartKeyPressOSD uses one 20 ms host timer. Pointer position and mouse-button state are sampled once per tick and shared with all plugins.
+SmartInputVisuals uses one 20 ms host timer. Pointer position and mouse-button state are sampled once per tick and shared with all plugins.
 
 The architecture avoids unnecessary work by:
 
@@ -394,7 +394,7 @@ At exit the host stops the timer, shuts down plugins, stops keyboard activity tr
 
 ## Credits
 
-SmartKeyPressOSD reflects a joint effort of human and machine: human design, testing and judgement combined with implementation assistance from ChatGPT.
+SmartInputVisuals reflects a joint effort of human and machine: human design, testing and judgement combined with implementation assistance from ChatGPT.
 
 ## Licence
 

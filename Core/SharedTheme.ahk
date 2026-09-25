@@ -1,7 +1,7 @@
-; SmartKeyPressOSD - shared visual theme
+; SmartInputVisuals - shared visual theme
 ; These values are available to the host and every plugin.
 
-class SmartKeyPressTheme {
+class SmartInputVisualsTheme {
 	; ARGB mouse-button colours shared globally by all visualisations.
 	static MouseColors := Map(
 		"LeftM",   0xFF0000FF,  ; blue

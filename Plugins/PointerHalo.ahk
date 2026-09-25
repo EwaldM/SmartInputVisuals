@@ -1,4 +1,4 @@
-; SmartKeyPressOSD plugin: PointerHalo
+; SmartInputVisuals plugin: PointerHalo
 ; Draws a hollow ring centred on the pointer and fades it after mouse inactivity.
 
 class PointerHaloPlugin {
@@ -56,14 +56,14 @@ class PointerHaloPlugin {
 		if this.IdleFadeEnabled && !state.MouseDown {
 			idleElapsed := A_TickCount - state.LastMouseMoveTick
 
-			if idleElapsed >= this.IdleDelay + SmartKeyPressTheme.IdleFadeDuration {
+			if idleElapsed >= this.IdleDelay + SmartInputVisualsTheme.IdleFadeDuration {
 				this.Hide(false)
 				return
 			}
 
-			if idleElapsed >= this.IdleDelay && SmartKeyPressTheme.IdleFadeDuration > 0 {
+			if idleElapsed >= this.IdleDelay && SmartInputVisualsTheme.IdleFadeDuration > 0 {
 				fadeElapsed := idleElapsed - this.IdleDelay
-				opacity := Round(255 * (1 - fadeElapsed / SmartKeyPressTheme.IdleFadeDuration))
+				opacity := Round(255 * (1 - fadeElapsed / SmartInputVisualsTheme.IdleFadeDuration))
 				opacity := Max(0, Min(255, opacity))
 			}
 		}
@@ -148,7 +148,7 @@ class PointerHaloPlugin {
 	static CreatePens() {
 		this.Pens["Neutral"] := this.CreatePen(this.NeutralColor)
 
-		for button, colour in SmartKeyPressTheme.MouseColors
+		for button, colour in SmartInputVisualsTheme.MouseColors
 			this.Pens[button] := this.CreatePen(colour)
 	}
 

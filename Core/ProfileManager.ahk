@@ -1,4 +1,4 @@
-; SmartKeyPressOSD - application-specific plugin profiles
+; SmartInputVisuals - application-specific plugin profiles
 ; Profiles select default plugin states according to the focused and/or hovered window context.
 
 class SmartProfileManager {
@@ -17,7 +17,7 @@ class SmartProfileManager {
 
 		if isDefault {
 			if this.DefaultProfile
-				throw Error("Only one SmartKeyPressOSD default profile may be registered.")
+				throw Error("Only one SmartInputVisuals default profile may be registered.")
 			this.DefaultProfile := profile
 		}
 	}
@@ -38,9 +38,9 @@ class SmartProfileManager {
 		for profile in this.Profiles {
 			profileKey := this.GetProfileKey(profile)
 			if profileKey = ""
-				throw Error("SmartKeyPressOSD profile names must not be empty.")
+				throw Error("SmartInputVisuals profile names must not be empty.")
 			if profileNames.Has(profileKey)
-				throw Error("Duplicate SmartKeyPressOSD profile name '" this.GetProfileName(profile) "'.")
+				throw Error("Duplicate SmartInputVisuals profile name '" this.GetProfileName(profile) "'.")
 			profileNames[profileKey] := true
 
 			if profile = this.DefaultProfile
@@ -57,7 +57,7 @@ class SmartProfileManager {
 				if matcher.Class = "" {
 					if this.ProcessProfiles.Has(matcher.Process) {
 						throw Error(
-							"Duplicate SmartKeyPressOSD process profile mapping for '"
+							"Duplicate SmartInputVisuals process profile mapping for '"
 							matcher.Process "'."
 						)
 					}
@@ -69,7 +69,7 @@ class SmartProfileManager {
 				windowKey := this.GetWindowProfileKey(matcher.Process, matcher.Class)
 				if this.WindowProfiles.Has(windowKey) {
 					throw Error(
-						"Duplicate SmartKeyPressOSD window profile mapping for '"
+						"Duplicate SmartInputVisuals window profile mapping for '"
 						matcher.Process "' / '" matcher.Class "'."
 					)
 				}
@@ -235,7 +235,7 @@ class SmartProfileManager {
 
 	static ValidatePluginConfiguration(registeredPluginNames) {
 		if !this.DefaultProfile
-			throw Error("SmartKeyPressOSD requires one Default profile.")
+			throw Error("SmartInputVisuals requires one Default profile.")
 
 		defaultPlugins := this.GetPluginSettings(this.DefaultProfile, true)
 

@@ -1,4 +1,4 @@
-; SmartKeyPressOSD - persistent shared input state
+; SmartInputVisuals - persistent shared input state
 ; The object is allocated once and updated in place every poll.
 
 class SmartInputState {

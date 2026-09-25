@@ -1,4 +1,4 @@
-; SmartKeyPressOSD - same-process plugin manager
+; SmartInputVisuals - same-process plugin manager
 ;
 ; Optional plugin configuration overrides:
 ;     static ScopeMode := "HoverOnly"       ; absent = inherit SmartAppScope.DefaultMode
@@ -26,7 +26,7 @@ class PluginManager {
 	static Register(plugin, name) {
 		for record in this.Plugins {
 			if StrLower(record.Name) = StrLower(name)
-				throw Error("Duplicate SmartKeyPressOSD plugin name '" name "'.")
+				throw Error("Duplicate SmartInputVisuals plugin name '" name "'.")
 		}
 
 		this.Plugins.Push({
@@ -236,7 +236,7 @@ class PluginManager {
 					record.Plugin.Shutdown()
 			} catch Error as err {
 				OutputDebug(
-					"SmartKeyPressOSD plugin '" record.Name
+					"SmartInputVisuals plugin '" record.Name
 					"' Shutdown error: " err.Message
 				)
 			}
@@ -254,7 +254,7 @@ class PluginManager {
 		record.Active := false
 
 		OutputDebug(
-			"SmartKeyPressOSD plugin '" record.Name
+			"SmartInputVisuals plugin '" record.Name
 			"' disabled after " callbackName " error: " err.Message
 		)
 
@@ -262,7 +262,7 @@ class PluginManager {
 			try record.Plugin.Shutdown()
 			catch Error as shutdownErr
 				OutputDebug(
-					"SmartKeyPressOSD plugin '" record.Name
+					"SmartInputVisuals plugin '" record.Name
 					"' cleanup error: " shutdownErr.Message
 				)
 		}

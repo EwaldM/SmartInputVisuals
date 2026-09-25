@@ -1,5 +1,5 @@
-; SmartKeyPressOSD - central GDI+ lifetime management
-; gdiplus.dll itself is kept resident by #DllLoad in SmartKeyPressOSD.ahk.
+; SmartInputVisuals - central GDI+ lifetime management
+; gdiplus.dll itself is kept resident by #DllLoad in SmartInputVisuals.ahk.
 
 class GDIPlusHost {
 	static Token := 0

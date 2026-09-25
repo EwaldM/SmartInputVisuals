@@ -1,4 +1,4 @@
-; SmartKeyPressOSD - display scope filtering
+; SmartInputVisuals - display scope filtering
 ; Keeps pointer-driven visualisations inside the selected application's client area.
 
 class SmartDisplayScope {
@@ -105,7 +105,7 @@ class SmartDisplayScope {
 
 		; WM_NCHITTEST = 0x0084, HTCLIENT = 1.
 		; SendMessageTimeout avoids allowing an unresponsive target application to
-		; stall SmartKeyPressOSD. The cached result caps hit-test traffic while the
+		; stall SmartInputVisuals. The cached result caps hit-test traffic while the
 		; cheap client-rectangle test still runs every host tick.
 		packedPoint := (x & 0xFFFF) | ((y & 0xFFFF) << 16)
 		result := Buffer(A_PtrSize, 0)

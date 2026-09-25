@@ -1,4 +1,4 @@
-; SmartKeyPressOSD plugin: KeyPressOSD
+; SmartInputVisuals plugin: KeyPressOSD
 ; Original text OSD functionality, implemented as an optional same-process plugin.
 
 class KeyPressOSDPlugin {
@@ -103,8 +103,8 @@ class KeyPressOSDPlugin {
 		}
 
 		fadeElapsed := elapsed - this.HoldDelay
-		if fadeElapsed < SmartKeyPressTheme.FadeDuration {
-			opacity := Round(255 * (1 - fadeElapsed / SmartKeyPressTheme.FadeDuration))
+		if fadeElapsed < SmartInputVisualsTheme.FadeDuration {
+			opacity := Round(255 * (1 - fadeElapsed / SmartInputVisualsTheme.FadeDuration))
 			opacity := Max(0, Min(255, opacity))
 
 			if opacity != this.Opacity {
@@ -208,13 +208,13 @@ class KeyPressOSDPlugin {
 		this.StringFormat := stringFormat
 
 		colours := Map(
-			"Ctrl", SmartKeyPressTheme.ModifierColor,
-			"Shift", SmartKeyPressTheme.ModifierColor,
-			"Alt", SmartKeyPressTheme.ModifierColor,
-			"LeftM", SmartKeyPressTheme.MouseColors["LeftM"],
-			"MiddleM", SmartKeyPressTheme.MouseColors["MiddleM"],
-			"RightM", SmartKeyPressTheme.MouseColors["RightM"],
-			"+", SmartKeyPressTheme.OtherTextColor
+			"Ctrl", SmartInputVisualsTheme.ModifierColor,
+			"Shift", SmartInputVisualsTheme.ModifierColor,
+			"Alt", SmartInputVisualsTheme.ModifierColor,
+			"LeftM", SmartInputVisualsTheme.MouseColors["LeftM"],
+			"MiddleM", SmartInputVisualsTheme.MouseColors["MiddleM"],
+			"RightM", SmartInputVisualsTheme.MouseColors["RightM"],
+			"+", SmartInputVisualsTheme.OtherTextColor
 		)
 
 		for token, argb in colours {
@@ -295,7 +295,7 @@ class KeyPressOSDPlugin {
 		status := DllCall(
 			"gdiplus\GdipGraphicsClear",
 			"Ptr", this.Graphics,
-			"UInt", SmartKeyPressTheme.BackgroundColor,
+			"UInt", SmartInputVisualsTheme.BackgroundColor,
 			"Int"
 		)
 		GDIPlusHost.Check(status, "KeyPressOSD GdipGraphicsClear")

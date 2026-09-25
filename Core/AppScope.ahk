@@ -1,4 +1,4 @@
-; SmartKeyPressOSD - application focus/hover scope
+; SmartInputVisuals - application focus/hover scope
 ; Applies plugin focus/hover rules to the application selected by ProfileManager.
 
 class SmartAppScope {
@@ -142,7 +142,7 @@ class SmartAppScope {
 		if this.GetWindowProcessId(rootHwnd) != this.OwnProcessId
 			return rootHwnd
 
-		; SmartKeyPressOSD's layered windows are click-through and topmost. If one
+		; SmartInputVisuals' layered windows are click-through and topmost. If one
 		; is returned, walk down the Z-order to the first visible external window
 		; which still contains the current pointer position.
 		candidate := rootHwnd

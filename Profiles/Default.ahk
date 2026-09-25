@@ -1,4 +1,4 @@
-; SmartKeyPressOSD default profile
+; SmartInputVisuals default profile
 ; Used whenever no enabled application-specific profile matches.
 
 class SmartDefaultProfile {

@@ -1,8 +1,8 @@
-# SmartKeyPressOSD — Creative Commons Attribution 4.0 International
+# SmartInputVisuals — Creative Commons Attribution 4.0 International
 
 SPDX-License-Identifier: CC-BY-4.0
 
-SmartKeyPressOSD is licensed under the **Creative Commons Attribution 4.0 International licence (CC BY 4.0)**.
+SmartInputVisuals is licensed under the **Creative Commons Attribution 4.0 International licence (CC BY 4.0)**.
 
 You are free to:
 

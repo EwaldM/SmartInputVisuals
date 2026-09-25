@@ -1,4 +1,4 @@
-; SmartKeyPressOSD plugin: ClickRipples
+; SmartInputVisuals plugin: ClickRipples
 ; Creates expanding concentric rings at each mouse-button press.
 
 class ClickRipplesPlugin {
@@ -28,7 +28,7 @@ class ClickRipplesPlugin {
 			oldRipple.Dispose()
 		}
 
-		colour := SmartKeyPressTheme.MouseColors[button]
+		colour := SmartInputVisualsTheme.MouseColors[button]
 		this.Ripples.Push(
 			ClickRippleEffect(
 				state.X,

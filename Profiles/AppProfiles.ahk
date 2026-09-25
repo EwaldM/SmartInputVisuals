@@ -1,4 +1,4 @@
-; SmartKeyPressOSD application-specific profiles
+; SmartInputVisuals application-specific profiles
 ;
 ; Each application profile can be disabled independently with static Enabled := false.
 ; If the setting is omitted or commented out, the profile is enabled. Disabled profiles

@@ -1,4 +1,4 @@
-; SmartKeyPressOSD
+; SmartInputVisuals
 ; Lightweight host for same-process visualisation plugins.
 
 #Requires AutoHotkey v2.0

@@ -1,4 +1,4 @@
-; SmartKeyPressOSD - keyboard activity tracking
+; SmartInputVisuals - keyboard activity tracking
 ; Uses one non-blocking InputHook to detect ordinary keyboard activity centrally.
 
 class SmartInputActivity {
