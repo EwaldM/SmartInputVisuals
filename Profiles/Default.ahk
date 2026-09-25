@@ -1,5 +1,5 @@
 ; SmartKeyPressOSD default profile
-; Used when profiles are enabled but no application-specific profile matches.
+; Used whenever no enabled application-specific profile matches.
 
 class SmartDefaultProfile {
 	static Name := "Default"

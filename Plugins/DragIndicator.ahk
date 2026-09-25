@@ -2,10 +2,6 @@
 ; Shows a straight dashed drag line with an arrowhead at the current position.
 
 class DragIndicatorPlugin {
-	static Enabled := true
-	static ScopeMode := ""
-	static PauseWhileTyping := true
-	static RequireClientArea := true
 
 	static DragThreshold := 6
 	static StrokeWidth := 3.0

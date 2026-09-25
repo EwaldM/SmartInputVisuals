@@ -2,7 +2,6 @@
 ; Keeps pointer-driven visualisations inside the selected application's client area.
 
 class SmartDisplayScope {
-	static Enabled := true
 	static LastHitHwnd := 0
 	static LastHitX := 0
 	static LastHitY := 0
@@ -15,11 +14,6 @@ class SmartDisplayScope {
 	static HitTestTimeout := 5
 
 	static Update(state) {
-		if !this.Enabled {
-			state.DisplayAllowed := true
-			return
-		}
-
 		if !state.HoverHwnd {
 			state.DisplayAllowed := false
 			return
@@ -27,9 +21,15 @@ class SmartDisplayScope {
 
 		; Profile selection and display eligibility are deliberately separate.
 		; A focus-based profile may remain selected while the pointer moves, but
-		; pointer-driven visuals are shown only over that selected application.
-		if SmartProfileManager.Enabled && state.ProfileProcess != "" {
-			if StrLower(state.HoverProcess) != StrLower(state.ProfileProcess) {
+		; pointer-driven visuals are shown only over the selected application/window
+		; context. This also distinguishes class-specific profiles which share a
+		; process, such as the Windows Desktop and File Explorer.
+		if state.ProfileProcess != "" {
+			if !SmartProfileManager.ContextMatchesSelectedApplication(
+				state.HoverProcess,
+				state.HoverClass,
+				state
+			) {
 				state.DisplayAllowed := false
 				return
 			}
@@ -43,15 +43,12 @@ class SmartDisplayScope {
 	}
 
 	static IsPluginAllowed(plugin, state) {
-		if !this.Enabled
-			return true
-
-		requireClientArea := false
-		try requireClientArea := !!plugin.RequireClientArea
+		allowOutsideClientArea := false
+		try allowOutsideClientArea := !!plugin.AllowOutsideClientArea
 		catch
-			requireClientArea := false
+			allowOutsideClientArea := false
 
-		if !requireClientArea
+		if allowOutsideClientArea
 			return true
 
 		return state.DisplayAllowed

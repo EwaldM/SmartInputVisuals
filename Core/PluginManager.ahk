@@ -1,10 +1,9 @@
 ; SmartKeyPressOSD - same-process plugin manager
 ;
-; Plugin configuration:
-;     static Enabled := true
-;     static ScopeMode := ""          ; empty = inherit SmartAppScope.Mode
-;     static PauseWhileTyping := true
-;     static RequireClientArea := true ; pointer-driven visualisations
+; Optional plugin configuration overrides:
+;     static ScopeMode := "HoverOnly"       ; absent = inherit SmartAppScope.DefaultMode
+;     static AllowWhileTyping := true       ; absent = pause while typing
+;     static AllowOutsideClientArea := true ; absent = require client/content area
 ;
 ; Optional callbacks:
 ;     Init()
@@ -25,13 +24,25 @@ class PluginManager {
 	static PreviousRightM := false
 
 	static Register(plugin, name) {
+		for record in this.Plugins {
+			if StrLower(record.Name) = StrLower(name)
+				throw Error("Duplicate SmartKeyPressOSD plugin name '" name "'.")
+		}
+
 		this.Plugins.Push({
 			Plugin: plugin,
 			Name: name,
-			Enabled: true,
+			Healthy: true,
 			Initialised: false,
 			Active: false
 		})
+	}
+
+	static GetRegisteredPluginNames() {
+		names := []
+		for record in this.Plugins
+			names.Push(record.Name)
+		return names
 	}
 
 	static Init() {
@@ -41,9 +52,9 @@ class PluginManager {
 		this.Initialised := true
 
 		for record in this.Plugins {
-			; A plugin whose own Enabled property is false receives no calls at all,
-			; including Init(). Configuration changes require a reload/restart.
-			if !this.IsPluginEnabled(record)
+			if !record.Healthy
+				continue
+			if !SmartProfileManager.IsPluginConfiguredAnywhere(record.Name)
 				continue
 
 			record.Initialised := true
@@ -52,7 +63,7 @@ class PluginManager {
 				if HasMethod(record.Plugin, "Init")
 					record.Plugin.Init()
 			} catch Error as err {
-				this.Disable(record, "Init", err)
+				this.DisableAfterError(record, "Init", err)
 			}
 		}
 	}
@@ -74,7 +85,7 @@ class PluginManager {
 		this.PreviousRightM := state.RightM
 
 		for record in this.Plugins {
-			if !record.Initialised || !this.IsPluginEnabled(record)
+			if !record.Initialised || !record.Healthy
 				continue
 
 			blockReason := this.GetBlockReason(record, state)
@@ -89,7 +100,7 @@ class PluginManager {
 				if HasMethod(record.Plugin, "Activated") {
 					try record.Plugin.Activated(state)
 					catch Error as err {
-						this.Disable(record, "Activated", err)
+						this.DisableAfterError(record, "Activated", err)
 						continue
 					}
 				}
@@ -117,12 +128,17 @@ class PluginManager {
 
 				record.Plugin.Tick(state)
 			} catch Error as err {
-				this.Disable(record, "Tick", err)
+				this.DisableAfterError(record, "Tick", err)
 			}
 		}
 	}
 
 	static GetBlockReason(record, state) {
+		; Never draw over the Windows taskbar/notification area. In particular,
+		; tray-icon clicks must not produce OSD text, ripples, halos or drag visuals.
+		if state.HoverIsTraySurface
+			return "TraySurface"
+
 		if !SmartProfileManager.IsPluginAvailable(record.Name)
 			return "Profile"
 		if !SmartProfileManager.IsPluginRuntimeEnabled(record.Name)
@@ -132,7 +148,7 @@ class PluginManager {
 			if !SmartAppScope.IsPluginAllowed(record.Plugin, state)
 				return "AppScope"
 		} catch Error as err {
-			this.Disable(record, "scope evaluation", err)
+			this.DisableAfterError(record, "scope evaluation", err)
 			return "Error"
 		}
 
@@ -140,17 +156,17 @@ class PluginManager {
 			if !SmartDisplayScope.IsPluginAllowed(record.Plugin, state)
 				return "DisplayScope"
 		} catch Error as err {
-			this.Disable(record, "display scope evaluation", err)
+			this.DisableAfterError(record, "display scope evaluation", err)
 			return "Error"
 		}
 
-		if SmartInputActivity.PauseWhileTyping && state.TypingActive {
-			pausePlugin := false
-			try pausePlugin := !!record.Plugin.PauseWhileTyping
+		if state.TypingActive {
+			allowWhileTyping := false
+			try allowWhileTyping := !!record.Plugin.AllowWhileTyping
 			catch
-				pausePlugin := false
+				allowWhileTyping := false
 
-			if pausePlugin
+			if !allowWhileTyping
 				return "Typing"
 		}
 
@@ -163,10 +179,8 @@ class PluginManager {
 		try {
 			if HasMethod(record.Plugin, "Deactivated")
 				record.Plugin.Deactivated(reason, state)
-			else if reason = "AppScope" && HasMethod(record.Plugin, "ScopeLost")
-				record.Plugin.ScopeLost()
 		} catch Error as err {
-			this.Disable(record, "Deactivated", err)
+			this.DisableAfterError(record, "Deactivated", err)
 		}
 	}
 
@@ -182,18 +196,9 @@ class PluginManager {
 
 			return true
 		} catch Error as err {
-			this.Disable(record, callbackName, err)
+			this.DisableAfterError(record, callbackName, err)
 			return false
 		}
-	}
-
-	static IsPluginEnabled(record) {
-		if !record.Enabled
-			return false
-
-		try return !!record.Plugin.Enabled
-		catch
-			return true
 	}
 
 	static Shutdown() {
@@ -224,11 +229,11 @@ class PluginManager {
 		}
 	}
 
-	static Disable(record, callbackName, err) {
-		if !record.Enabled
+	static DisableAfterError(record, callbackName, err) {
+		if !record.Healthy
 			return
 
-		record.Enabled := false
+		record.Healthy := false
 		record.Active := false
 
 		OutputDebug(

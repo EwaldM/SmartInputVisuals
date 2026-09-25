@@ -18,18 +18,16 @@ class SmartInputState {
 	Alt := false
 
 	TypingActive := false
-	LastTypingTick := 0
 
 	HoverHwnd := 0
 	ActiveHwnd := 0
 	HoverProcess := ""
 	ActiveProcess := ""
-	HoverAllowed := true
-	FocusAllowed := true
-	ScopeAllowed := true
+	HoverClass := ""
+	ActiveClass := ""
+	HoverIsTraySurface := false
 	DisplayAllowed := true
 
-	ProfileName := ""
 	ProfileProcess := ""
 
 	Update() {
@@ -72,7 +70,6 @@ class SmartInputState {
 			this.Alt := false
 		}
 
-		this.LastTypingTick := SmartInputActivity.LastTypingTick
 		this.TypingActive := SmartInputActivity.IsTypingActive()
 	}
 

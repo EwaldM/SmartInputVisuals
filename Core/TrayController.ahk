@@ -41,17 +41,21 @@ class SmartTrayController {
 		if !this.Initialised
 			return
 
-		; The tray toggle targets the foreground application's profile. Pointer
-		; hover is deliberately not used here: moving to the notification area is
-		; itself a hover-context change and must not switch the toggle to Default.
-		; Keep the last non-shell foreground profile while the tray/menu has focus.
-		if SmartProfileManager.Enabled {
-			if state.ActiveProcess != "" && !this.IsShellSurface(state.ActiveHwnd)
-				this.TargetProfile := SmartProfileManager.GetProfileForProcess(state.ActiveProcess)
-			else if !this.TargetProfile && SmartProfileManager.ActiveProfile
-				this.TargetProfile := SmartProfileManager.ActiveProfile
-		} else {
-			this.TargetProfile := 0
+		; The tray toggle targets the foreground window's profile. Preserve the
+		; previously captured target only while Windows temporarily activates the
+		; taskbar/tray, a popup menu, or a SmartKeyPressOSD-owned helper window.
+		; Desktop and File Explorer windows resolve normally, including optional
+		; process + window-class profile mappings.
+		if state.ActiveProcess != "" && !this.ShouldPreserveTarget(
+			state.ActiveHwnd,
+			state.ActiveClass
+		) {
+			this.TargetProfile := SmartProfileManager.GetProfileForWindow(
+				state.ActiveProcess,
+				state.ActiveClass
+			)
+		} else if !this.TargetProfile && SmartProfileManager.ActiveProfile {
+			this.TargetProfile := SmartProfileManager.ActiveProfile
 		}
 
 		this.Refresh()
@@ -75,7 +79,7 @@ class SmartTrayController {
 		available := false
 		runtimeEnabled := false
 
-		if SmartProfileManager.Enabled && this.TargetProfile {
+		if this.TargetProfile {
 			available := SmartProfileManager.IsPluginAvailableForProfile(
 				this.TargetProfile,
 				"DragIndicator"
@@ -127,24 +131,22 @@ class SmartTrayController {
 		ToolTip("", 0, 0, this.FeedbackTooltipId)
 	}
 
-	static IsShellSurface(hwnd) {
+	static ShouldPreserveTarget(hwnd, className := "") {
 		if !hwnd
 			return false
 
-		processName := ""
-		className := ""
-		try processName := WinGetProcessName("ahk_id " hwnd)
-		catch
-			return false
-		try className := WinGetClass("ahk_id " hwnd)
-		catch
-			className := ""
-
-		if StrLower(processName) = "explorer.exe"
+		if SmartAppScope.IsTraySurface(hwnd, className)
 			return true
 
-		switch className {
-			case "Shell_TrayWnd", "Shell_SecondaryTrayWnd", "NotifyIconOverflowWindow", "#32768":
+		if className = ""
+			className := SmartAppScope.GetWindowClass(hwnd)
+		if className = "#32768"
+			return true
+
+		; The AutoHotkey tray menu can transiently activate a window owned by the
+		; script itself. Do not let that replace the profile captured beforehand.
+		try {
+			if WinGetPID("ahk_id " hwnd) = ProcessExist()
 				return true
 		}
 

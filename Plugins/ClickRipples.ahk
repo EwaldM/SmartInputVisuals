@@ -2,10 +2,6 @@
 ; Creates expanding concentric rings at each mouse-button press.
 
 class ClickRipplesPlugin {
-	static Enabled := true
-	static ScopeMode := "" ; empty = inherit SmartAppScope.Mode
-	static PauseWhileTyping := true
-	static RequireClientArea := true
 
 	static Lifetime := 650
 	static MaxRadius := 52
@@ -19,7 +15,7 @@ class ClickRipplesPlugin {
 
 	static WantsTick(state) {
 		; No animation means no Tick calls for this plugin.
-		return this.Enabled && this.Ripples.Length > 0
+		return this.Ripples.Length > 0
 	}
 
 	static Deactivated(reason, state) {
@@ -27,9 +23,6 @@ class ClickRipplesPlugin {
 	}
 
 	static MouseDown(button, state) {
-		if !this.Enabled
-			return
-
 		while this.Ripples.Length >= this.MaxActiveRipples {
 			oldRipple := this.Ripples.RemoveAt(1)
 			oldRipple.Dispose()

@@ -1,17 +1,15 @@
 ; SmartKeyPressOSD - application-specific plugin profiles
-; Profiles select plugin sets according to the focused and/or hovered process.
+; Profiles select plugin sets according to the focused and/or hovered window context.
 
 class SmartProfileManager {
-	static Enabled := true
 	static SelectionMode := "HoverThenFocus"
 
 	static Profiles := []
 	static ProcessProfiles := Map()
+	static WindowProfiles := Map()
 	static RuntimePluginStates := Map()
 	static DefaultProfile := 0
 	static ActiveProfile := 0
-	static ActiveProfileName := ""
-	static ActiveProcess := ""
 
 	static Register(profile, isDefault := false) {
 		this.Profiles.Push(profile)
@@ -23,17 +21,16 @@ class SmartProfileManager {
 		}
 	}
 
-	static Init() {
+	static Init(registeredPluginNames) {
 		this.ProcessProfiles.Clear()
+		this.WindowProfiles.Clear()
 		this.RuntimePluginStates.Clear()
 		this.ValidateSelectionMode(this.SelectionMode)
+		this.ValidatePluginConfiguration(registeredPluginNames)
 
 		profileNames := Map()
 
 		for profile in this.Profiles {
-			if !this.IsProfileEnabled(profile)
-				continue
-
 			profileKey := this.GetProfileKey(profile)
 			if profileKey = ""
 				throw Error("SmartKeyPressOSD profile names must not be empty.")
@@ -44,88 +41,100 @@ class SmartProfileManager {
 			if profile = this.DefaultProfile
 				continue
 
-			applications := []
-			try applications := profile.Applications
-			catch
-				applications := []
+			applications := this.GetApplicationMatchers(profile)
+			profileEnabled := this.IsProfileEnabled(profile)
 
-			for processName in applications {
-				normalized := StrLower(Trim(processName))
-				if normalized = ""
+			for application in applications {
+				matcher := this.NormalizeApplicationMatcher(application, profile)
+				if !profileEnabled
 					continue
 
-				if this.ProcessProfiles.Has(normalized)
-					throw Error("Duplicate SmartKeyPressOSD profile mapping for '" normalized "'.")
+				if matcher.Class = "" {
+					if this.ProcessProfiles.Has(matcher.Process) {
+						throw Error(
+							"Duplicate SmartKeyPressOSD process profile mapping for '"
+							matcher.Process "'."
+						)
+					}
 
-				this.ProcessProfiles[normalized] := profile
+					this.ProcessProfiles[matcher.Process] := profile
+					continue
+				}
+
+				windowKey := this.GetWindowProfileKey(matcher.Process, matcher.Class)
+				if this.WindowProfiles.Has(windowKey) {
+					throw Error(
+						"Duplicate SmartKeyPressOSD window profile mapping for '"
+						matcher.Process "' / '" matcher.Class "'."
+					)
+				}
+
+				this.WindowProfiles[windowKey] := profile
 			}
 		}
 
 		this.ActiveProfile := this.DefaultProfile
-		this.ActiveProfileName := this.GetProfileName(this.DefaultProfile)
 	}
 
 	static Update(state) {
-		if !this.Enabled {
-			this.ActiveProfile := this.DefaultProfile
-			this.ActiveProfileName := this.GetProfileName(this.DefaultProfile)
-			this.ActiveProcess := ""
-			state.ProfileName := this.ActiveProfileName
-			state.ProfileProcess := ""
-			return
-		}
-
 		profile := 0
 		processName := ""
+		className := ""
 
 		switch this.SelectionMode {
 			case "HoverThenFocus":
 				if state.HoverProcess != "" {
 					processName := state.HoverProcess
-					profile := this.FindProfile(processName)
+					className := state.HoverClass
+					profile := this.FindProfile(processName, className)
 				} else if state.ActiveProcess != "" {
 					processName := state.ActiveProcess
-					profile := this.FindProfile(processName)
+					className := state.ActiveClass
+					profile := this.FindProfile(processName, className)
 				}
 			case "FocusThenHover":
 				if state.ActiveProcess != "" {
 					processName := state.ActiveProcess
-					profile := this.FindProfile(processName)
+					className := state.ActiveClass
+					profile := this.FindProfile(processName, className)
 				} else if state.HoverProcess != "" {
 					processName := state.HoverProcess
-					profile := this.FindProfile(processName)
+					className := state.HoverClass
+					profile := this.FindProfile(processName, className)
 				}
 			case "HoverOnly":
 				processName := state.HoverProcess
-				profile := this.FindProfile(processName)
+				className := state.HoverClass
+				profile := this.FindProfile(processName, className)
 			case "FocusOnly":
 				processName := state.ActiveProcess
-				profile := this.FindProfile(processName)
+				className := state.ActiveClass
+				profile := this.FindProfile(processName, className)
 		}
 
-		; The selected process always owns the profile decision. If it has no
-		; application-specific mapping, use the Default profile rather than
+		; The selected window context always owns the profile decision. If it has
+		; no application-specific mapping, use the Default profile rather than
 		; falling back to a mapped application in the secondary context.
 		if !profile
 			profile := this.DefaultProfile
 
 		this.ActiveProfile := profile
-		this.ActiveProfileName := this.GetProfileName(profile)
-		this.ActiveProcess := processName
-
-		state.ProfileName := this.ActiveProfileName
 		state.ProfileProcess := processName
 	}
 
-	static IsPluginEnabled(pluginName) {
-		return this.IsPluginAvailable(pluginName) && this.IsPluginRuntimeEnabled(pluginName)
+	static IsPluginAvailable(pluginName) {
+		return this.IsPluginAvailableForProfile(this.ActiveProfile, pluginName)
 	}
 
-	static IsPluginAvailable(pluginName) {
-		if !this.Enabled
-			return true
+	static IsPluginConfiguredAnywhere(pluginName) {
+		for profile in this.Profiles {
+			if profile != this.DefaultProfile && !this.IsProfileEnabled(profile)
+				continue
+			if this.IsPluginAvailableForProfile(profile, pluginName)
+				return true
+		}
 
-		return this.IsPluginAvailableForProfile(this.ActiveProfile, pluginName)
+		return false
 	}
 
 	static IsPluginAvailableForProfile(profile, pluginName) {
@@ -141,19 +150,18 @@ class SmartProfileManager {
 				return enabled
 		}
 
-		return true
+		; Missing settings fail closed. Init() also requires every registered
+		; plugin to have an explicit entry in the Default profile.
+		return false
 	}
 
 	static IsPluginRuntimeEnabled(pluginName) {
-		if !this.Enabled
-			return true
-
 		return this.IsPluginRuntimeEnabledForProfile(this.ActiveProfile, pluginName)
 	}
 
 	static IsPluginRuntimeEnabledForProfile(profile, pluginName) {
 		if !profile
-			return true
+			return false
 
 		runtimeMap := this.GetRuntimePluginMap(profile, false)
 		if !runtimeMap || !runtimeMap.Has(pluginName)
@@ -165,7 +173,7 @@ class SmartProfileManager {
 	static TogglePluginForProfile(profile, pluginName, &enabled) {
 		enabled := false
 
-		if !this.Enabled || !profile
+		if !profile
 			return false
 		if !this.IsPluginAvailableForProfile(profile, pluginName)
 			return false
@@ -176,20 +184,36 @@ class SmartProfileManager {
 		return true
 	}
 
-	static GetProfileForProcess(processName) {
-		profile := this.FindProfile(processName)
+	static GetProfileForWindow(processName, className := "") {
+		profile := this.FindProfile(processName, className)
 		return profile ? profile : this.DefaultProfile
 	}
 
-	static FindProfile(processName) {
-		if processName = ""
+	static FindProfile(processName, className := "") {
+		normalizedProcess := this.NormalizeProcessName(processName)
+		if normalizedProcess = ""
 			return 0
 
-		normalized := StrLower(processName)
-		if !this.ProcessProfiles.Has(normalized)
-			return 0
+		normalizedClass := this.NormalizeClassName(className)
+		if normalizedClass != "" {
+			windowKey := this.GetWindowProfileKey(normalizedProcess, normalizedClass)
+			if this.WindowProfiles.Has(windowKey)
+				return this.WindowProfiles[windowKey]
+		}
 
-		return this.ProcessProfiles[normalized]
+		if this.ProcessProfiles.Has(normalizedProcess)
+			return this.ProcessProfiles[normalizedProcess]
+
+		return 0
+	}
+
+	static ContextMatchesSelectedApplication(processName, className, state) {
+		if processName = "" || state.ProfileProcess = ""
+			return false
+		if this.NormalizeProcessName(processName) != this.NormalizeProcessName(state.ProfileProcess)
+			return false
+
+		return this.GetProfileForWindow(processName, className) = this.ActiveProfile
 	}
 
 	static ProfileHasPluginSetting(profile, pluginName, &enabled) {
@@ -203,6 +227,137 @@ class SmartProfileManager {
 
 		enabled := !!plugins[pluginName]
 		return true
+	}
+
+	static ValidatePluginConfiguration(registeredPluginNames) {
+		if !this.DefaultProfile
+			throw Error("SmartKeyPressOSD requires one Default profile.")
+
+		defaultPlugins := this.GetPluginSettings(this.DefaultProfile, true)
+
+		for pluginName in registeredPluginNames {
+			if !defaultPlugins.Has(pluginName) {
+				throw Error(
+					"Default profile has no setting for registered plugin '"
+					pluginName "'."
+				)
+			}
+		}
+
+		; The Default profile is the canonical plugin-name list. Application
+		; profiles may omit entries to inherit defaults, but may not introduce
+		; unknown names. Default entries for an optional plugin are harmless when
+		; that plugin file is absent.
+		for profile in this.Profiles {
+			if profile = this.DefaultProfile
+				continue
+
+			plugins := this.GetPluginSettings(profile, false)
+			for pluginName, unused in plugins {
+				if !defaultPlugins.Has(pluginName) {
+					throw Error(
+						"Unknown plugin '" pluginName "' in profile '"
+						this.GetProfileName(profile) "'."
+					)
+				}
+			}
+		}
+	}
+
+	static GetPluginSettings(profile, required) {
+		plugins := 0
+		try plugins := profile.Plugins
+		catch {
+			if required
+				throw Error("Default profile must define a Plugins map.")
+			return Map()
+		}
+
+		if Type(plugins) != "Map" {
+			throw Error(
+				"Profile '" this.GetProfileName(profile) "' must define Plugins as a Map."
+			)
+		}
+
+		return plugins
+	}
+
+	static GetApplicationMatchers(profile) {
+		applications := []
+		try applications := profile.Applications
+		catch
+			return []
+
+		if Type(applications) != "Array" {
+			throw Error(
+				"Profile '" this.GetProfileName(profile) "' must define Applications as an Array."
+			)
+		}
+
+		return applications
+	}
+
+	static NormalizeApplicationMatcher(application, profile) {
+		applicationType := Type(application)
+
+		if applicationType = "String" {
+			processName := this.NormalizeProcessName(application)
+			if processName = "" {
+				throw Error(
+					"Profile '" this.GetProfileName(profile)
+					"' contains an empty application process name."
+				)
+			}
+
+			return {Process: processName, Class: ""}
+		}
+
+		if applicationType != "Map" {
+			throw Error(
+				"Profile '" this.GetProfileName(profile)
+				"' application entries must be process-name strings or Maps."
+			)
+		}
+
+		if !application.Has("Process") {
+			throw Error(
+				"Profile '" this.GetProfileName(profile)
+				"' application Map is missing the Process entry."
+			)
+		}
+
+		processName := this.NormalizeProcessName(application["Process"])
+		if processName = "" {
+			throw Error(
+				"Profile '" this.GetProfileName(profile)
+				"' contains an empty application process name."
+			)
+		}
+
+		className := ""
+		if application.Has("Class") {
+			className := this.NormalizeClassName(application["Class"])
+			if className = "" {
+				throw Error(
+					"Profile '" this.GetProfileName(profile)
+					"' contains an empty application window class."
+				)
+			}
+		}
+
+		return {Process: processName, Class: className}
+	}
+
+	static NormalizeProcessName(processName) {
+		return StrLower(Trim(processName))
+	}
+
+	static NormalizeClassName(className) {
+		return StrLower(Trim(className))
+	}
+
+	static GetWindowProfileKey(processName, className) {
+		return this.NormalizeProcessName(processName) "|" this.NormalizeClassName(className)
 	}
 
 	static GetRuntimePluginMap(profile, create) {

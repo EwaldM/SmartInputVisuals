@@ -1,85 +1,49 @@
-; SmartKeyPressOSD - application scope filtering
-; Restricts enabled plugins to configured foreground and/or hovered applications.
+; SmartKeyPressOSD - application focus/hover scope
+; Applies plugin focus/hover rules to the application selected by ProfileManager.
 
 class SmartAppScope {
-	; Disabled by default to preserve the original all-applications behaviour.
-	static Enabled := false
-	static Mode := "FocusOrHover"
-
-	; Add executable names here, for example:
-	; static Applications := ["devenv.exe", "msedge.exe"]
-	static Applications := []
-
-	static AllowedProcesses := Map()
+	static DefaultMode := "FocusOrHover"
 
 	static LastActiveHwnd := 0
 	static LastActiveProcess := ""
+	static LastActiveClass := ""
 	static LastHoverHwnd := 0
 	static LastHoverProcess := ""
+	static LastHoverClass := ""
 	static OwnProcessId := 0
 
 	static Init() {
 		this.OwnProcessId := ProcessExist()
-		this.AllowedProcesses.Clear()
-
-		for processName in this.Applications {
-			normalized := StrLower(Trim(processName))
-			if normalized != ""
-				this.AllowedProcesses[normalized] := true
-		}
-
-		this.MatchMode(this.Mode, false, false)
+		this.MatchMode(this.DefaultMode, false, false)
 	}
 
-	static Update(state, needProcessContext := false) {
-		if !this.Enabled && !needProcessContext {
-			state.ActiveHwnd := 0
-			state.ActiveProcess := ""
-			state.HoverProcess := ""
-			state.FocusAllowed := true
-			state.HoverAllowed := true
-			state.ScopeAllowed := true
-			return
-		}
-
+	static Update(state) {
 		activeHwnd := WinExist("A")
 		hoverHwnd := this.ResolveHoverWindow(state.HoverHwnd, state.X, state.Y)
 
 		if activeHwnd != this.LastActiveHwnd {
 			this.LastActiveHwnd := activeHwnd
 			this.LastActiveProcess := this.GetProcessName(activeHwnd)
+			this.LastActiveClass := this.GetWindowClass(activeHwnd)
 		}
 
 		if hoverHwnd != this.LastHoverHwnd {
 			this.LastHoverHwnd := hoverHwnd
 			this.LastHoverProcess := this.GetProcessName(hoverHwnd)
+			this.LastHoverClass := this.GetWindowClass(hoverHwnd)
 		}
 
 		state.ActiveHwnd := activeHwnd
 		state.HoverHwnd := hoverHwnd
 		state.ActiveProcess := this.LastActiveProcess
 		state.HoverProcess := this.LastHoverProcess
-
-		if this.Enabled {
-			state.FocusAllowed := this.IsProcessAllowed(state.ActiveProcess)
-			state.HoverAllowed := this.IsProcessAllowed(state.HoverProcess)
-			state.ScopeAllowed := this.MatchMode(
-				this.Mode,
-				state.FocusAllowed,
-				state.HoverAllowed
-			)
-		} else {
-			state.FocusAllowed := true
-			state.HoverAllowed := true
-			state.ScopeAllowed := true
-		}
+		state.ActiveClass := this.LastActiveClass
+		state.HoverClass := this.LastHoverClass
+		state.HoverIsTraySurface := this.IsTraySurface(hoverHwnd, this.LastHoverClass)
 	}
 
 	static IsPluginAllowed(plugin, state) {
-		if !this.Enabled
-			return true
-
-		mode := this.Mode
+		mode := this.DefaultMode
 		pluginMode := ""
 
 		try pluginMode := plugin.ScopeMode
@@ -89,21 +53,37 @@ class SmartAppScope {
 		if pluginMode != ""
 			mode := pluginMode
 
-		return this.MatchMode(mode, state.FocusAllowed, state.HoverAllowed)
+		if mode = "Always"
+			return true
+
+		if state.ProfileProcess = ""
+			return false
+
+		focusMatches := SmartProfileManager.ContextMatchesSelectedApplication(
+			state.ActiveProcess,
+			state.ActiveClass,
+			state
+		)
+		hoverMatches := SmartProfileManager.ContextMatchesSelectedApplication(
+			state.HoverProcess,
+			state.HoverClass,
+			state
+		)
+		return this.MatchMode(mode, focusMatches, hoverMatches)
 	}
 
-	static MatchMode(mode, focusAllowed, hoverAllowed) {
+	static MatchMode(mode, focusMatches, hoverMatches) {
 		switch mode {
 			case "Always":
 				return true
 			case "FocusOnly":
-				return focusAllowed
+				return focusMatches
 			case "HoverOnly":
-				return hoverAllowed
+				return hoverMatches
 			case "FocusOrHover":
-				return focusAllowed || hoverAllowed
+				return focusMatches || hoverMatches
 			case "FocusAndHover":
-				return focusAllowed && hoverAllowed
+				return focusMatches && hoverMatches
 			default:
 				throw Error(
 					"Unknown SmartAppScope mode '" mode "'. "
@@ -112,11 +92,19 @@ class SmartAppScope {
 		}
 	}
 
-	static IsProcessAllowed(processName) {
-		if processName = ""
+	static IsTraySurface(hwnd, className := "") {
+		if !hwnd
 			return false
 
-		return this.AllowedProcesses.Has(StrLower(processName))
+		if className = ""
+			className := this.GetWindowClass(hwnd)
+
+		switch className {
+			case "Shell_TrayWnd", "Shell_SecondaryTrayWnd", "NotifyIconOverflowWindow", "TopLevelWindowForOverflowXamlIsland":
+				return true
+		}
+
+		return false
 	}
 
 	static GetProcessName(hwnd) {
@@ -124,6 +112,15 @@ class SmartAppScope {
 			return ""
 
 		try return WinGetProcessName("ahk_id " hwnd)
+		catch
+			return ""
+	}
+
+	static GetWindowClass(hwnd) {
+		if !hwnd
+			return ""
+
+		try return WinGetClass("ahk_id " hwnd)
 		catch
 			return ""
 	}

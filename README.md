@@ -142,7 +142,7 @@ static MinMovement := 2
 
 The indicator does not appear until the pointer has moved at least `DragThreshold` pixels, so ordinary clicks do not flash a line. Rendering is limited to roughly 30 FPS and movements below `MinMovement` pixels are ignored between rendered frames. After the drag ends, the final arrow line fades out over `SmartKeyPressTheme.FadeDuration` milliseconds before its backing surface is released.
 
-The original single layered backing DIB is used for reliable rendering. It grows in 32-pixel blocks only when needed and is released when the drag ends, so drag memory is not retained while the plugin is idle. A very long diagonal drag can still require a temporarily large backing surface because the bitmap must cover the line's bounding rectangle.
+DragIndicator uses a single layered backing DIB for reliable rendering. It grows in 32-pixel blocks only when needed and is released when the drag ends, so drag memory is not retained while the plugin is idle. A very long diagonal drag can still require a temporarily large backing surface because the bitmap must cover the line's bounding rectangle.
 
 ## Pause while typing
 
@@ -155,50 +155,51 @@ static TypingPauseDuration := 750
 
 Modifier-only presses (`Ctrl`, `Shift`, `Alt`, Windows keys) do not count as typing. A normal key in a combination does; for example, pressing `Ctrl` alone does not pause visualisations, while `Ctrl+C` does.
 
-A plugin opts into this behaviour with:
+Pause-while-typing is the default plugin policy. While typing suppression is active, `PluginManager` does not dispatch mouse or tick callbacks to plugins. A currently visible plugin receives one `Deactivated("Typing", state)` callback so it can remove its existing visualisation, then receives no normal callbacks until it becomes eligible again.
+
+A plugin which genuinely needs to remain active while typing can explicitly opt out with:
 
 ```ahk
-static PauseWhileTyping := true
+static AllowWhileTyping := true
 ```
-
-All included visual plugins opt in. While typing suppression is active, `PluginManager` does not dispatch mouse or tick callbacks to those plugins. A currently visible plugin receives one `Deactivated("Typing", state)` callback so it can remove its existing visualisation, then receives no normal callbacks until it becomes eligible again.
 
 ## Application scope
 
-Configure `Core/AppScope.ahk` to restrict plugins to selected applications:
+`Core/AppScope.ahk` controls the focus/hover relationship required by a plugin for the application currently selected by `ProfileManager`. Application profiles decide **which plugins are enabled**; `AppScope` only decides whether an enabled plugin is currently allowed by focus/hover context.
+
+The default application scope mode is:
 
 ```ahk
-static Enabled := true
-static Mode := "FocusOrHover"
-static Applications := [
-	"devenv.exe",
-	"msedge.exe"
-]
+static DefaultMode := "FocusOrHover"
 ```
 
 Supported modes:
 
 | Mode | Behaviour |
 |---|---|
-| `Always` | Ignore the application list for that plugin |
-| `FocusOnly` | Configured application must have focus |
-| `HoverOnly` | Pointer must be over a configured application |
+| `Always` | Ignore focus/hover context for that plugin |
+| `FocusOnly` | The profile-selected application must have focus |
+| `HoverOnly` | The pointer must be over the profile-selected application |
 | `FocusOrHover` | Either condition is sufficient |
-| `FocusAndHover` | Both conditions are required |
+| `FocusAndHover` | The profile-selected application must both have focus and be under the pointer |
 
-Plugins may override the global mode with `static ScopeMode := "..."`. `PointerHalo` defaults to `HoverOnly`; the other included plugins inherit the global mode.
+Plugins may override the default application scope mode with `static ScopeMode := "..."`. `PointerHalo` defaults to `HoverOnly`; the other included plugins inherit `SmartAppScope.DefaultMode`.
 
-Process names are cached and are resolved again only when the relevant window handle changes. SmartKeyPressOSD's own topmost click-through windows are skipped when resolving the application beneath the pointer.
+There is no separate application allow-list in `AppScope`. Where visualisations are available is controlled by `Profiles/Default.ahk` and the enabled application-specific profiles in `Profiles/AppProfiles.ahk`.
+
+Process names and window classes are cached and are resolved again only when the relevant window handle changes. SmartKeyPressOSD's own topmost click-through windows are skipped when resolving the application beneath the pointer. Visual plugins are suppressed over Windows taskbar/notification-area surfaces, so clicking tray icons never produces SmartKeyPressOSD visualisations.
 
 ### Client-area display restriction
 
-`Core/DisplayScope.ahk` applies a separate display rule to pointer-driven visualisations. It is enabled by default and requires the pointer to be inside the selected application's interactive client area. Standard title bars and window borders are excluded without changing which application profile is selected.
+`Core/DisplayScope.ahk` applies a separate display rule to pointer-driven visualisations. Requiring the pointer to be inside the selected application's interactive client area is the default plugin policy. Standard title bars and window borders are excluded without changing which application profile is selected.
+
+Focus-based profile selection remains unchanged: the focused application's profile can stay selected while the pointer moves, but its pointer-driven visuals are suppressed unless the pointer is inside that selected application's interactive client area. The check combines the Windows client rectangle with `WM_NCHITTEST`, so custom title bars that are drawn inside the client rectangle but report a non-client hit-test result are excluded as well.
+
+A plugin which intentionally needs to display outside the client area can explicitly opt out with:
 
 ```ahk
-static Enabled := true
+static AllowOutsideClientArea := true
 ```
-
-The included visual plugins opt in with `static RequireClientArea := true`. Focus-based profile selection remains unchanged: the focused application's profile can stay selected while the pointer moves, but its pointer-driven visuals are suppressed unless the pointer is inside that selected application's interactive client area. The check combines the Windows client rectangle with `WM_NCHITTEST`, so custom title bars that are drawn inside the client rectangle but report a non-client hit-test result are excluded as well.
 
 The inexpensive client-rectangle test runs every host tick. `WM_NCHITTEST` is cached and refreshed immediately when the hovered window changes; within the same window it refreshes only after the pointer has moved at least 3 pixels and at least 50 ms have elapsed. This caps cross-window hit testing at about 20 calls per second while the pointer moves. Its timeout is limited to 5 ms; if the target application does not answer in time, the already-established client-rectangle result is used.
 
@@ -208,12 +209,11 @@ The inexpensive client-rectangle test runs every host tick. `WM_NCHITTEST` is ca
 
 ## Application-specific profiles
 
-Profiles control **which plugins are enabled for particular applications**. This is independent of application scope: profiles choose a plugin set, while `AppScope` controls where a plugin is permitted to display.
+Profiles control **which plugins are enabled for particular applications**. `AppScope` then applies the configured focus/hover rule to the profile-selected application.
 
-Profiles are enabled by default in `Core/ProfileManager.ahk`:
+Profile selection is always part of the host architecture. `Core/ProfileManager.ahk` controls only how the application context is selected:
 
 ```ahk
-static Enabled := true
 static SelectionMode := "HoverThenFocus"
 ```
 
@@ -224,14 +224,15 @@ Supported selection modes:
 - `HoverOnly` — the hovered application determines the profile
 - `FocusOnly` — the focused application determines the profile
 
-For every selected application, an application-specific profile is used when one is registered; otherwise the `Default` profile is used immediately. This means moving the pointer from a profiled application to an unprofiled application switches to the Default profile without requiring a focus change.
+For every selected application/window context, an application-specific profile is used when one is registered; otherwise the `Default` profile is used immediately. This means moving the pointer from a profiled application to an unprofiled application switches to the Default profile without requiring a focus change.
 
-`Profiles/Default.ahk` defines the fallback plugin set and enables only `KeyPressOSD`. `Profiles/AppProfiles.ahk` contains disabled example profiles which can be enabled or adapted.
+`Profiles/Default.ahk` defines the fallback plugin set and enables only `KeyPressOSD`. `Profiles/AppProfiles.ahk` contains ready-to-adapt examples; the PowerPoint and Excel/Word examples are disabled, while the Desktop example is enabled by default.
 
 Example profile definition:
 
 ```ahk
 class PowerPointProfile {
+	static Enabled := false
 	static Name := "PowerPoint"
 	static Applications := ["POWERPNT.EXE"]
 	static Plugins := Map(
@@ -243,14 +244,51 @@ class PowerPointProfile {
 }
 ```
 
-Each application-specific profile has an explicit `static Enabled := true/false` switch. Plugin names omitted from a profile fall back to the corresponding setting in the Default profile. Executable names are matched case-insensitively. Duplicate executable mappings are rejected during startup.
+An application-specific profile is enabled when `Enabled` is omitted; add `static Enabled := false` to disable it. This makes commenting out that line a convenient way to enable an example profile. Plugin names omitted from an application-specific profile inherit the corresponding setting from the Default profile. Simple `Applications` entries are executable-name strings matched case-insensitively. A class-specific entry can instead use `Map("Process", "...", "Class", "...")`; it takes precedence over a process-only mapping for the same executable. Duplicate process-only mappings and duplicate process/class mappings are rejected during startup.
+
+For example, a Desktop-only profile can distinguish Windows Desktop windows from ordinary File Explorer windows even though both use `explorer.exe`:
+
+```ahk
+class DesktopProfile {
+	; static Enabled := false
+	static Name := "Desktop"
+	static Applications := [
+		Map("Process", "explorer.exe", "Class", "Progman"),
+		Map("Process", "explorer.exe", "Class", "WorkerW")
+	]
+	static Plugins := Map(
+		"KeyPressOSD", false,
+		"PointerHalo", false,
+		"ClickRipples", false,
+		"DragIndicator", false
+	)
+}
+
+SmartProfileManager.Register(DesktopProfile)
+```
+
+With no separate process-only `explorer.exe` profile, ordinary File Explorer windows continue to use the `Default` profile.
+
+Useful `explorer.exe` window classes for profile matching:
+
+| Area | Window class | Typical use |
+| --- | --- | --- |
+| File Explorer | `CabinetWClass` | Normal File Explorer windows |
+| Desktop | `Progman` | Primary Desktop host |
+| Desktop | `WorkerW` | Desktop worker/content host |
+| Primary taskbar | `Shell_TrayWnd` | Main taskbar and notification-area shell surface |
+| Secondary taskbar | `Shell_SecondaryTrayWnd` | Taskbar on additional monitors |
+
+Taskbar classes are normally handled by SmartKeyPressOSD's built-in tray/taskbar exclusion rather than by application profiles.
+
+`Default.ahk` is authoritative and fail-closed: every registered plugin must have an explicit setting there. Application-specific profiles may use only plugin names known to the Default profile, so misspelled or obsolete names are reported at startup instead of being silently ignored. Entries for optional plugin files may remain in the Default profile even when those files are not installed.
 
 ### Per-profile DragIndicator toggle
 
 `DragIndicator` has an additional session-only runtime toggle in the tray menu. The toggle is stored separately for each application profile and never overrides the profile configuration itself.
 
 - Right-click the SmartKeyPressOSD tray icon and use `DragIndicator`.
-- The toggle targets the profile of the foreground application, so moving the pointer to the Windows notification area does not switch the toggle context to the Default profile.
+- The toggle targets the profile of the foreground application/window context. Entering the taskbar, notification area or tray popup preserves the previously captured target instead of switching the toggle to a shell profile. Desktop and File Explorer windows resolve normally.
 - When that profile permits `DragIndicator`, the menu item is enabled and its check mark shows that profile's runtime state.
 - When that profile disables `DragIndicator`, the menu item is disabled. No status message is shown.
 - An accepted toggle briefly shows `DragIndicator: ON` or `DragIndicator: OFF` near the pointer.
@@ -264,13 +302,14 @@ When a profile disables an already-visible plugin, the manager sends one `Deacti
 
 The manager applies eligibility centrally in this order:
 
-1. plugin's own `Enabled` flag
+1. taskbar/notification-area exclusion
 2. active application profile
 3. per-profile runtime toggle
-4. application scope
-5. pause-while-typing policy
+4. focus/hover application scope
+5. client-area display scope
+6. pause-while-typing policy
 
-A plugin with `Enabled := false` is not initialised and receives no plugin calls at all. Changing `Enabled` in source therefore requires a reload/restart.
+Plugin availability is configured through profiles rather than a second plugin-level `Enabled` switch. A plugin which is disabled by the Default profile and by every enabled application-specific profile is not initialised at startup. If a plugin callback throws an error, only that plugin is marked unhealthy, shut down and removed from further dispatch; the other plugins continue running.
 
 For profile, runtime-toggle, scope or typing transitions, an active plugin may receive one `Deactivated(reason, state)` cleanup callback. Once blocked, it receives no `WantsTick`, `Tick`, `MouseDown` or `MouseUp` calls.
 
@@ -312,10 +351,11 @@ state.Ctrl
 state.Shift
 state.Alt
 state.TypingActive
-state.LastTypingTick
 state.HoverProcess
 state.ActiveProcess
-state.ProfileName
+state.HoverClass
+state.ActiveClass
+state.HoverIsTraySurface
 state.ProfileProcess
 ```
 
@@ -325,14 +365,14 @@ SmartKeyPressOSD uses one 20 ms host timer. Pointer position and mouse-button st
 
 The architecture avoids unnecessary work by:
 
-- skipping globally disabled plugins before initialisation and dispatch;
+- not initialising plugins which are unavailable in every enabled profile;
 - skipping plugins disabled by the active profile;
 - skipping plugins disabled by their per-profile runtime toggle;
 - skipping out-of-scope plugins;
-- skipping pause-while-typing plugins while typing is active;
+- suppressing plugins while typing is active unless they explicitly opt out;
 - calling `WantsTick()` only after all eligibility checks pass;
 - using persistent input state instead of per-tick Maps;
-- caching application process names;
+- caching application process names and window classes;
 - using a lightweight client-area check every tick and throttling `WM_NCHITTEST` to at most about 20 refreshes per second while the pointer moves;
 - switching DPI awareness once per host tick and restoring it afterwards, keeping mixed-DPI coordinates consistent without changing global script DPI behaviour;
 - using `SetWindowPos()` for unchanged moving visuals where possible;
@@ -345,6 +385,10 @@ The architecture avoids unnecessary work by:
 `gdiplus.dll` is kept loaded for the script lifetime. `GDIPlusHost` starts GDI+ exactly once; plugins create and release their own drawing resources but never start or stop GDI+ themselves.
 
 At exit the host stops the timer, shuts down plugins, stops keyboard activity tracking, then shuts GDI+ down last.
+
+## Credits
+
+SmartKeyPressOSD reflects a joint effort of human and machine: human design, testing and judgement combined with implementation assistance from ChatGPT.
 
 ## Licence
 

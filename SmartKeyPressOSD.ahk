@@ -36,7 +36,7 @@ AppState := SmartInputState()
 
 SmartInputActivity.Init()
 SmartAppScope.Init()
-SmartProfileManager.Init()
+SmartProfileManager.Init(PluginManager.GetRegisteredPluginNames())
 SmartTrayController.Init()
 GDIPlusHost.Init()
 OnExit(ShutdownApplication)
@@ -58,9 +58,8 @@ AppTick() {
 	try {
 		AppState.Update()
 
-		; Profiles need foreground/hover process context even when AppScope itself is
-		; disabled, so AppScope resolves process names whenever profiles are enabled.
-		SmartAppScope.Update(AppState, SmartProfileManager.Enabled)
+		; Resolve foreground/hover application context once for profiles and scope rules.
+		SmartAppScope.Update(AppState)
 		SmartProfileManager.Update(AppState)
 		SmartDisplayScope.Update(AppState)
 		SmartTrayController.Update(AppState)

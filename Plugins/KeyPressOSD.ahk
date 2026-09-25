@@ -2,10 +2,6 @@
 ; Original text OSD functionality, implemented as an optional same-process plugin.
 
 class KeyPressOSDPlugin {
-	static Enabled := true
-	static ScopeMode := "" ; empty = inherit SmartAppScope.Mode
-	static PauseWhileTyping := true
-	static RequireClientArea := true
 
 	static HoldDelay := 700
 	static OffsetX := 30
@@ -41,9 +37,6 @@ class KeyPressOSDPlugin {
 	static CurrentWidth := 1
 
 	static Init() {
-		if !this.Enabled
-			return
-
 		this.Gui := Gui("+AlwaysOnTop -Caption +ToolWindow +E0x08080020")
 		this.Gui.Show("Hide w1 h1 x0 y0")
 
@@ -54,7 +47,7 @@ class KeyPressOSDPlugin {
 
 	static WantsTick(state) {
 		; Hidden and idle means no Tick call at all.
-		return this.Enabled && (state.MouseDown || this.Visible)
+		return state.MouseDown || this.Visible
 	}
 
 	static Deactivated(reason, state) {
@@ -62,7 +55,7 @@ class KeyPressOSDPlugin {
 	}
 
 	static Tick(state) {
-		if !this.Enabled || !this.Gui
+		if !this.Gui
 			return
 
 		if state.MouseDown {
