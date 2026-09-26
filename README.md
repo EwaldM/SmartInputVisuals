@@ -71,11 +71,11 @@ static MouseColors := Map(
 	"RightM",  0xFFFF0000
 )
 
-static FadeDuration := 450
-static IdleFadeDuration := 900
+static FadeDuration := 900
+static IdleDelay := 2500
 ```
 
-`FadeDuration` is shared by transient visualisations such as `KeyPressOSD` and `DragIndicator`. `IdleFadeDuration` is used for the longer pointer-halo idle fade.
+`FadeDuration` defines one shared fade duration for `KeyPressOSD`, `PointerHalo` and `DragIndicator`. `IdleDelay` defines how long idle `PointerHalo` and completed `DragIndicator` visuals remain fully visible before that fade begins.
 
 ## KeyPressOSD
 
@@ -94,7 +94,7 @@ A plain left click is intentionally suppressed. If another modifier or mouse but
 Default position/timing settings in `Plugins/KeyPressOSD.ahk`:
 
 ```ahk
-static HoldDelay := 700
+static OSDHoldDuration := 700
 static OffsetX := 30
 static OffsetY := -35
 ```
@@ -109,10 +109,9 @@ static StrokeWidth := 3.0
 static NeutralColor := 0xA08B008B
 
 static IdleFadeEnabled := true
-static IdleDelay := 2500
 ```
 
-After `IdleDelay` milliseconds without pointer movement, the halo fades over `SmartInputVisualsTheme.IdleFadeDuration`. Moving the pointer or holding a mouse button restores full visibility immediately.
+After `SmartInputVisualsTheme.IdleDelay` milliseconds without pointer movement, the halo fades over `SmartInputVisualsTheme.FadeDuration`. Moving the pointer or holding a mouse button restores full visibility immediately.
 
 ## ClickRipples
 
@@ -141,9 +140,9 @@ static UpdateInterval := 33
 static MinMovement := 2
 ```
 
-The indicator does not appear until the pointer has moved at least `DragThreshold` pixels, so ordinary clicks do not flash a line. Rendering is limited to roughly 30 FPS and movements below `MinMovement` pixels are ignored between rendered frames. After the drag ends, the final arrow line fades out over `SmartInputVisualsTheme.FadeDuration` milliseconds before its backing surface is released.
+The indicator does not appear until the pointer has moved at least `DragThreshold` pixels, so ordinary clicks do not flash a line. Rendering is limited to roughly 30 FPS and movements below `MinMovement` pixels are ignored between rendered frames. After the drag ends, the final arrow line remains fully visible for `SmartInputVisualsTheme.IdleDelay`, then fades over `SmartInputVisualsTheme.FadeDuration`. If another drag starts drawing before that idle period finishes, the previous indicator starts fading immediately while the new drag is drawn at full opacity.
 
-DragIndicator uses a single layered backing DIB for reliable rendering. It grows in 32-pixel blocks only when needed and is released when the drag ends, so drag memory is not retained while the plugin is idle. A very long diagonal drag can still require a temporarily large backing surface because the bitmap must cover the line's bounding rectangle.
+DragIndicator normally uses one layered backing DIB. During the brief overlap between a fading completed drag and a newly drawn drag, a second temporary DIB retains the previous indicator independently; it is released as soon as the shared fade finishes. Surfaces otherwise remain short-lived, and a very long diagonal drag can still require a temporarily large backing surface because the bitmap must cover the line's bounding rectangle.
 
 ## Visuals while typing
 
@@ -384,7 +383,7 @@ The architecture avoids unnecessary work by:
 - using `SetWindowPos()` for unchanged moving visuals where possible;
 - redrawing `PointerHalo` only when its style/opacity changes;
 - ticking `ClickRipples` only while animations are active;
-- throttling `DragIndicator` rendering to roughly 30 FPS, ignoring sub-2-pixel movement and releasing its backing surface after each drag.
+- throttling `DragIndicator` rendering to roughly 30 FPS, ignoring sub-2-pixel movement and releasing completed-drag surfaces after the shared fade.
 
 ## GDI+ lifetime
 

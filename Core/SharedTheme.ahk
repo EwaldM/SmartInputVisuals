@@ -14,6 +14,6 @@ class SmartInputVisualsTheme {
 
 	static BackgroundColor := 0x40FFFF00 ; yellow at approximately 25% opacity
 
-	static FadeDuration := 450
-	static IdleFadeDuration := 900
+	static FadeDuration := 900
+	static IdleDelay := 2500
 }

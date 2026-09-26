@@ -3,7 +3,7 @@
 
 class KeyPressOSDPlugin {
 
-	static HoldDelay := 700
+	static OSDHoldDuration := 700
 	static OffsetX := 30
 	static OffsetY := -35
 
@@ -93,7 +93,7 @@ class KeyPressOSDPlugin {
 
 		elapsed := A_TickCount - this.LastActiveTick
 
-		if elapsed < this.HoldDelay {
+		if elapsed < this.OSDHoldDuration {
 			if this.Opacity != 255 {
 				this.Opacity := 255
 				this.Present(this.LastX, this.LastY, this.Opacity, true)
@@ -102,7 +102,7 @@ class KeyPressOSDPlugin {
 			return
 		}
 
-		fadeElapsed := elapsed - this.HoldDelay
+		fadeElapsed := elapsed - this.OSDHoldDuration
 		if fadeElapsed < SmartInputVisualsTheme.FadeDuration {
 			opacity := Round(255 * (1 - fadeElapsed / SmartInputVisualsTheme.FadeDuration))
 			opacity := Max(0, Min(255, opacity))

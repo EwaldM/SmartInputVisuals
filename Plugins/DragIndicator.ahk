@@ -21,14 +21,27 @@ class DragIndicatorPlugin {
 	static DashedPens := Map()
 	static SolidPens := Map()
 
+	static RetiredGui := 0
+	static RetiredHdc := 0
+	static RetiredHbm := 0
+	static RetiredOldHbm := 0
+	static RetiredVisible := false
+	static RetiredOpacity := 255
+	static RetiredFadeStartTick := 0
+	static RetiredPresentX := 0
+	static RetiredPresentY := 0
+	static RetiredPresentWidth := 0
+	static RetiredPresentHeight := 0
+
 	static ActiveButton := ""
 	static StartX := 0
 	static StartY := 0
 	static LastEndX := -2147483648
 	static LastEndY := -2147483648
 	static LastRenderTick := 0
-	static FadeStartTick := 0
-	static Fading := false
+	static DragVisualStarted := false
+	static Holding := false
+	static HoldStartTick := 0
 	static Opacity := 255
 	static LastPresentX := 0
 	static LastPresentY := 0
@@ -39,11 +52,15 @@ class DragIndicatorPlugin {
 	static Init() {
 		this.Gui := Gui("+AlwaysOnTop -Caption +ToolWindow +E0x08080020")
 		this.Gui.Show("Hide w1 h1 x0 y0")
+
+		this.RetiredGui := Gui("+AlwaysOnTop -Caption +ToolWindow +E0x08080020")
+		this.RetiredGui.Show("Hide w1 h1 x0 y0")
+
 		this.CreatePens()
 	}
 
 	static WantsTick(state) {
-		return this.ActiveButton != "" || this.Visible
+		return this.ActiveButton != "" || this.Visible || this.RetiredVisible
 	}
 
 	static Deactivated(reason, state) {
@@ -54,20 +71,13 @@ class DragIndicatorPlugin {
 		if this.ActiveButton != ""
 			return
 
-		if this.Visible {
-			this.Hide()
-			this.DestroySurface()
-		}
-
-		this.Fading := false
-		this.FadeStartTick := 0
-		this.Opacity := 255
 		this.ActiveButton := button
 		this.StartX := state.X
 		this.StartY := state.Y
 		this.LastEndX := state.X
 		this.LastEndY := state.Y
 		this.LastRenderTick := 0
+		this.DragVisualStarted := false
 	}
 
 	static MouseUp(button, state) {
@@ -76,11 +86,14 @@ class DragIndicatorPlugin {
 	}
 
 	static Tick(state) {
-		if this.ActiveButton = "" {
-			if this.Fading
-				this.TickFade()
+		if this.RetiredVisible
+			this.TickRetiredFade()
+
+		if this.Holding
+			this.TickHold()
+
+		if this.ActiveButton = ""
 			return
-		}
 
 		if !state.IsButtonDown(this.ActiveButton) {
 			this.EndDrag()
@@ -97,9 +110,12 @@ class DragIndicatorPlugin {
 		distance := Sqrt(dx * dx + dy * dy)
 
 		if distance < this.DragThreshold {
-			if this.Visible {
-				this.Hide()
-				this.DestroySurface()
+			if this.DragVisualStarted {
+				if this.Visible {
+					this.Hide()
+					this.DestroySurface()
+				}
+				this.DragVisualStarted := false
 			}
 			return
 		}
@@ -107,6 +123,12 @@ class DragIndicatorPlugin {
 		now := A_TickCount
 		if this.LastRenderTick && now - this.LastRenderTick < this.UpdateInterval
 			return
+
+		if !this.DragVisualStarted {
+			if this.Holding && this.Visible
+				this.StartRetiredFade()
+			this.DragVisualStarted := true
+		}
 
 		this.LastEndX := state.X
 		this.LastEndY := state.Y
@@ -343,44 +365,191 @@ class DragIndicatorPlugin {
 		this.ActiveButton := ""
 		this.LastRenderTick := 0
 
+		if this.DragVisualStarted && this.Visible {
+			this.Holding := true
+			this.HoldStartTick := A_TickCount
+			this.Opacity := 255
+		}
+
+		this.DragVisualStarted := false
+	}
+
+	static TickHold() {
 		if !this.Visible {
-			this.Reset()
+			this.Holding := false
+			this.HoldStartTick := 0
+			return
+		}
+
+		if A_TickCount - this.HoldStartTick >= SmartInputVisualsTheme.IdleDelay
+			this.StartRetiredFade()
+	}
+
+	static StartRetiredFade() {
+		if !this.Visible || !this.Hdc {
+			this.Holding := false
+			this.HoldStartTick := 0
 			return
 		}
 
 		if SmartInputVisualsTheme.FadeDuration <= 0 {
-			this.Reset()
+			this.Hide()
+			this.DestroySurface()
+			this.Holding := false
+			this.HoldStartTick := 0
 			return
 		}
 
-		this.FadeStartTick := A_TickCount
-		this.Fading := true
+		this.ResetRetired()
+		this.EnsureRetiredSurface(this.LastPresentWidth, this.LastPresentHeight)
+
+		ok := DllCall(
+			"gdi32\BitBlt",
+			"Ptr", this.RetiredHdc,
+			"Int", 0,
+			"Int", 0,
+			"Int", this.LastPresentWidth,
+			"Int", this.LastPresentHeight,
+			"Ptr", this.Hdc,
+			"Int", 0,
+			"Int", 0,
+			"UInt", 0x00CC0020,
+			"Int"
+		)
+		if !ok
+			throw OSError()
+
+		this.PresentRetired(
+			this.LastPresentX,
+			this.LastPresentY,
+			this.LastPresentWidth,
+			this.LastPresentHeight,
+			255
+		)
+		this.RetiredFadeStartTick := A_TickCount
+
+		this.Hide()
+		this.DestroySurface()
+		this.Holding := false
+		this.HoldStartTick := 0
 	}
 
-	static TickFade() {
-		if !this.Visible {
-			this.Reset()
+	static TickRetiredFade() {
+		if !this.RetiredVisible
 			return
-		}
 
-		elapsed := A_TickCount - this.FadeStartTick
+		elapsed := A_TickCount - this.RetiredFadeStartTick
 		if elapsed >= SmartInputVisualsTheme.FadeDuration {
-			this.Reset()
+			this.ResetRetired()
 			return
 		}
 
 		opacity := Round(255 * (1 - elapsed / SmartInputVisualsTheme.FadeDuration))
 		opacity := Max(0, Min(255, opacity))
 
-		if opacity != this.Opacity {
-			this.Present(
-				this.LastPresentX,
-				this.LastPresentY,
-				this.LastPresentWidth,
-				this.LastPresentHeight,
+		if opacity != this.RetiredOpacity {
+			this.PresentRetired(
+				this.RetiredPresentX,
+				this.RetiredPresentY,
+				this.RetiredPresentWidth,
+				this.RetiredPresentHeight,
 				opacity
 			)
 		}
+	}
+
+	static EnsureRetiredSurface(width, height) {
+		this.DestroyRetiredSurface()
+
+		this.RetiredHdc := DllCall("gdi32\CreateCompatibleDC", "Ptr", 0, "Ptr")
+		if !this.RetiredHdc
+			throw OSError()
+
+		bmi := Buffer(40, 0)
+		NumPut("UInt", 40, bmi, 0)
+		NumPut("Int", width, bmi, 4)
+		NumPut("Int", -height, bmi, 8)
+		NumPut("UShort", 1, bmi, 12)
+		NumPut("UShort", 32, bmi, 14)
+		NumPut("UInt", 0, bmi, 16)
+
+		bits := 0
+		this.RetiredHbm := DllCall(
+			"gdi32\CreateDIBSection",
+			"Ptr", 0,
+			"Ptr", bmi.Ptr,
+			"UInt", 0,
+			"Ptr*", &bits,
+			"Ptr", 0,
+			"UInt", 0,
+			"Ptr"
+		)
+		if !this.RetiredHbm
+			throw OSError()
+
+		this.RetiredOldHbm := DllCall(
+			"gdi32\SelectObject",
+			"Ptr", this.RetiredHdc,
+			"Ptr", this.RetiredHbm,
+			"Ptr"
+		)
+
+	}
+
+	static PresentRetired(x, y, width, height, opacity := 255) {
+		dst := Buffer(8, 0)
+		NumPut("Int", x, dst, 0)
+		NumPut("Int", y, dst, 4)
+
+		size := Buffer(8, 0)
+		NumPut("Int", width, size, 0)
+		NumPut("Int", height, size, 4)
+
+		src := Buffer(8, 0)
+		blend := Buffer(4, 0)
+		NumPut("UChar", 0, blend, 0)
+		NumPut("UChar", 0, blend, 1)
+		NumPut("UChar", opacity, blend, 2)
+		NumPut("UChar", 1, blend, 3)
+
+		ok := DllCall(
+			"user32\UpdateLayeredWindow",
+			"Ptr", this.RetiredGui.Hwnd,
+			"Ptr", 0,
+			"Ptr", dst.Ptr,
+			"Ptr", size.Ptr,
+			"Ptr", this.RetiredHdc,
+			"Ptr", src.Ptr,
+			"UInt", 0,
+			"Ptr", blend.Ptr,
+			"UInt", 0x2,
+			"Int"
+		)
+		if !ok
+			throw OSError()
+
+		flags := 0x0002 | 0x0001 | 0x0010
+		if !this.RetiredVisible
+			flags |= 0x0040
+
+		DllCall(
+			"user32\SetWindowPos",
+			"Ptr", this.RetiredGui.Hwnd,
+			"Ptr", -1,
+			"Int", 0,
+			"Int", 0,
+			"Int", 0,
+			"Int", 0,
+			"UInt", flags,
+			"Int"
+		)
+
+		this.RetiredVisible := true
+		this.RetiredOpacity := opacity
+		this.RetiredPresentX := x
+		this.RetiredPresentY := y
+		this.RetiredPresentWidth := width
+		this.RetiredPresentHeight := height
 	}
 
 	static Hide() {
@@ -389,12 +558,20 @@ class DragIndicatorPlugin {
 		this.Visible := false
 	}
 
+	static HideRetired() {
+		if this.RetiredGui && this.RetiredVisible
+			DllCall("user32\ShowWindow", "Ptr", this.RetiredGui.Hwnd, "Int", 0)
+		this.RetiredVisible := false
+	}
+
 	static Reset() {
 		this.Hide()
 		this.DestroySurface()
+		this.ResetRetired()
 		this.ActiveButton := ""
-		this.Fading := false
-		this.FadeStartTick := 0
+		this.DragVisualStarted := false
+		this.Holding := false
+		this.HoldStartTick := 0
 		this.Opacity := 255
 		this.LastPresentX := 0
 		this.LastPresentY := 0
@@ -405,6 +582,17 @@ class DragIndicatorPlugin {
 		this.LastEndX := -2147483648
 		this.LastEndY := -2147483648
 		this.LastRenderTick := 0
+	}
+
+	static ResetRetired() {
+		this.HideRetired()
+		this.DestroyRetiredSurface()
+		this.RetiredOpacity := 255
+		this.RetiredFadeStartTick := 0
+		this.RetiredPresentX := 0
+		this.RetiredPresentY := 0
+		this.RetiredPresentWidth := 0
+		this.RetiredPresentHeight := 0
 	}
 
 	static DestroySurface() {
@@ -431,9 +619,25 @@ class DragIndicatorPlugin {
 		this.CapacityHeight := 0
 	}
 
+	static DestroyRetiredSurface() {
+		if this.RetiredHdc && this.RetiredOldHbm
+			DllCall("gdi32\SelectObject", "Ptr", this.RetiredHdc, "Ptr", this.RetiredOldHbm, "Ptr")
+
+		if this.RetiredHbm {
+			DllCall("gdi32\DeleteObject", "Ptr", this.RetiredHbm)
+			this.RetiredHbm := 0
+		}
+
+		if this.RetiredHdc {
+			DllCall("gdi32\DeleteDC", "Ptr", this.RetiredHdc)
+			this.RetiredHdc := 0
+		}
+
+		this.RetiredOldHbm := 0
+	}
+
 	static Shutdown() {
 		this.Reset()
-		this.DestroySurface()
 
 		for _, pen in this.DashedPens {
 			if pen
@@ -450,6 +654,11 @@ class DragIndicatorPlugin {
 		if this.Gui {
 			this.Gui.Destroy()
 			this.Gui := 0
+		}
+
+		if this.RetiredGui {
+			this.RetiredGui.Destroy()
+			this.RetiredGui := 0
 		}
 	}
 }
