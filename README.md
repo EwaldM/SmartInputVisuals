@@ -22,6 +22,10 @@ SmartInputVisuals is an AutoHotkey v2 input-visualisation host with optional sam
 - central GDI+ lifetime management
 - no external libraries
 
+## Screen sharing
+
+SmartInputVisuals overlays are normally included when an entire desktop or monitor is shared, but not when only a single application window is shared. Capture behaviour varies by conferencing application and Windows/graphics configuration. See [Architecture — Screen sharing](docs/Architecture.md#screen-sharing) for details.
+
 ## Requirements
 
 - Windows
@@ -52,10 +56,6 @@ The primary user configuration is in `Profiles/Default.ahk` and `Profiles/AppPro
 - `Toolbar` controls startup position, opacity, colours, title mode, layout and optional touch-oriented button sizing.
 
 See [Configuration](docs/Configuration.md) for the complete reference.
-
-## Screen sharing
-
-SmartInputVisuals overlays are normally included when an entire desktop or monitor is shared, but not when only a single application window is shared. Capture behaviour varies by conferencing application and Windows/graphics configuration. See [Architecture — Screen sharing](docs/Architecture.md#screen-sharing) for details.
 
 ## Project structure
 
