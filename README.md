@@ -159,18 +159,21 @@ DragIndicator normally uses one layered backing DIB. During the brief overlap be
 
 ## MagnifierLens
 
-`Plugins/MagnifierLens.ahk` provides a click-through lens using the Windows Magnification API. The lens follows the pointer while the plugin is eligible, but the pointer's relative position inside the lens is configurable. Lens geometry uses the same physical-pixel, mixed-DPI coordinate context as the other visual plugins.
+`Plugins/MagnifierLens.ahk` provides a click-through lens using the Windows Magnification API. The lens stays fixed during ordinary pointer movement and follows only when the pointer moves far enough from its configured anchor position. Lens geometry uses the same physical-pixel, mixed-DPI coordinate context as the other visual plugins.
 
 ```ahk
 static Magnification := 2.0
 static LensWidth := 400
 static LensHeight := 600
 static PointerPositionX := 0.25
-static PointerPositionY := 0.25
+static PointerPositionY := 0.15
+static FollowStartDistance := 20
+static FollowStopDistance := 12
+static MinFollowMove := 4
 static UpdateInterval := 33
 ```
 
-`PointerPositionX` and `PointerPositionY` use normalised values from `0.0` to `1.0`; `0.5 / 0.5` centres the pointer in the lens. The default `0.25 / 0.25` places it one quarter of the way from the left and top edges. Lens dimensions are physical screen pixels. The host GUI disables AutoHotkey DPI scaling so its client area and the native magnifier child use the same physical-pixel dimensions. Near virtual-desktop edges the lens is kept on-screen and the source rectangle is adjusted accordingly. The system pointer remains normal-sized rather than being magnified.
+`PointerPositionX` and `PointerPositionY` use normalised values from `0.0` to `1.0`; `0.5 / 0.5` centres the preferred pointer position in the lens. The default `0.25 / 0.15` defines an anchor 25% from the left edge and 15% from the top edge. The lens remains stationary while the pointer moves inside a dead zone around that anchor. Per-axis hysteresis starts following when the pointer is at least `FollowStartDistance` (20 px) from the anchor and stops only after the pointer returns within `FollowStopDistance` (12 px). While following, the lens moves only far enough to keep the pointer near the start-distance boundary rather than re-centring it on every update. Corrections smaller than `MinFollowMove` (4 px) are ignored, reducing small window-position changes and visible jitter. Lens dimensions and follow distances are physical screen pixels. The host GUI disables AutoHotkey DPI scaling so its client area and the native magnifier child use the same physical-pixel dimensions. Near virtual-desktop edges the lens is kept on-screen and the source rectangle is adjusted accordingly. The system pointer remains normal-sized rather than being magnified.
 
 The default magnification is the integer factor `2.0`, which maps source pixels more cleanly to output pixels and generally keeps rasterised text crisper than fractional factors. Fractional values remain supported: the source rectangle is rounded to whole desktop pixels and the transform is adjusted minimally per axis so that it fills the configured lens without a partial-pixel edge mismatch.
 

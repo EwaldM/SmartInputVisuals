@@ -8,7 +8,10 @@ class MagnifierLensPlugin {
 	static LensWidth := 400
 	static LensHeight := 600
 	static PointerPositionX := 0.25
-	static PointerPositionY := 0.25
+	static PointerPositionY := 0.15
+	static FollowStartDistance := 20
+	static FollowStopDistance := 12
+	static MinFollowMove := 4
 	static UpdateInterval := 33
 
 	static Gui := 0
@@ -19,6 +22,8 @@ class MagnifierLensPlugin {
 	static LastRefreshTick := 0
 	static LastHostX := -2147483648
 	static LastHostY := -2147483648
+	static FollowXDirection := 0
+	static FollowYDirection := 0
 
 	static Init() {
 		this.ValidateConfiguration()
@@ -98,6 +103,14 @@ class MagnifierLensPlugin {
 			throw Error("MagnifierLens PointerPositionX must be between 0.0 and 1.0.")
 		if this.PointerPositionY < 0 || this.PointerPositionY > 1
 			throw Error("MagnifierLens PointerPositionY must be between 0.0 and 1.0.")
+		if this.FollowStartDistance < 1
+			throw Error("MagnifierLens FollowStartDistance must be at least 1 pixel.")
+		if this.FollowStopDistance < 0
+			throw Error("MagnifierLens FollowStopDistance must not be negative.")
+		if this.FollowStopDistance >= this.FollowStartDistance
+			throw Error("MagnifierLens FollowStopDistance must be smaller than FollowStartDistance.")
+		if this.MinFollowMove < 1
+			throw Error("MagnifierLens MinFollowMove must be at least 1 pixel.")
 		if this.UpdateInterval < 0
 			throw Error("MagnifierLens UpdateInterval must not be negative.")
 	}
@@ -249,10 +262,37 @@ class MagnifierLensPlugin {
 		virtualRight := virtualLeft + virtualWidth
 		virtualBottom := virtualTop + virtualHeight
 
-		desiredHostX := Round(mouseX - lensWidth * this.PointerPositionX)
-		desiredHostY := Round(mouseY - lensHeight * this.PointerPositionY)
-		hostX := this.Clamp(desiredHostX, virtualLeft, virtualRight - lensWidth)
-		hostY := this.Clamp(desiredHostY, virtualTop, virtualBottom - lensHeight)
+		if !this.Visible {
+			desiredHostX := Round(mouseX - lensWidth * this.PointerPositionX)
+			desiredHostY := Round(mouseY - lensHeight * this.PointerPositionY)
+			hostX := this.Clamp(desiredHostX, virtualLeft, virtualRight - lensWidth)
+			hostY := this.Clamp(desiredHostY, virtualTop, virtualBottom - lensHeight)
+			this.FollowXDirection := 0
+			this.FollowYDirection := 0
+		}
+		else {
+			xFollow := this.CalculateAxisFollow(
+				mouseX,
+				this.LastHostX,
+				lensWidth * this.PointerPositionX,
+				virtualLeft,
+				virtualRight - lensWidth,
+				this.FollowXDirection
+			)
+			yFollow := this.CalculateAxisFollow(
+				mouseY,
+				this.LastHostY,
+				lensHeight * this.PointerPositionY,
+				virtualTop,
+				virtualBottom - lensHeight,
+				this.FollowYDirection
+			)
+
+			hostX := xFollow.HostPosition
+			hostY := yFollow.HostPosition
+			this.FollowXDirection := xFollow.Direction
+			this.FollowYDirection := yFollow.Direction
+		}
 
 		pointerOutputX := mouseX - hostX
 		pointerOutputY := mouseY - hostY
@@ -278,6 +318,44 @@ class MagnifierLensPlugin {
 			SourceTop: sourceTop,
 			SourceRight: sourceLeft + sourceWidth,
 			SourceBottom: sourceTop + sourceHeight
+		}
+	}
+
+	static CalculateAxisFollow(pointerPosition, hostPosition, anchorOffset, minimumHost, maximumHost, direction) {
+		anchorPosition := hostPosition + anchorOffset
+		offset := pointerPosition - anchorPosition
+
+		; The pointer normally moves freely inside a dead zone centred on the
+		; configured PointerPosition anchor. Once it crosses FollowStartDistance,
+		; keep that direction active until it returns inside FollowStopDistance.
+		; This hysteresis avoids boundary jitter without allowing the pointer to
+		; roam across a large part of an off-centre lens.
+		if direction < 0 && offset >= -this.FollowStopDistance
+			direction := 0
+		else if direction > 0 && offset <= this.FollowStopDistance
+			direction := 0
+
+		; A fast pointer move may cross directly into the opposite start zone.
+		; Re-evaluate immediately so the follow direction can switch in one tick.
+		if direction = 0 {
+			if offset <= -this.FollowStartDistance
+				direction := -1
+			else if offset >= this.FollowStartDistance
+				direction := 1
+		}
+
+		move := 0
+		if direction < 0 && offset < -this.FollowStartDistance
+			move := offset + this.FollowStartDistance
+		else if direction > 0 && offset > this.FollowStartDistance
+			move := offset - this.FollowStartDistance
+
+		if Abs(move) >= this.MinFollowMove
+			hostPosition := this.Clamp(hostPosition + Round(move), minimumHost, maximumHost)
+
+		return {
+			HostPosition: hostPosition,
+			Direction: direction
 		}
 	}
 
@@ -325,6 +403,8 @@ class MagnifierLensPlugin {
 		this.LastHostX := -2147483648
 		this.LastHostY := -2147483648
 		this.LastRefreshTick := 0
+		this.FollowXDirection := 0
+		this.FollowYDirection := 0
 	}
 
 	static Shutdown() {
