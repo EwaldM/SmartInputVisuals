@@ -3,6 +3,9 @@
 
 class SmartTrayController {
 	static AppName := ""
+	static ProfileItemPrefix := "Profile: "
+	static ProfileItem := ""
+	static ToolbarItem := "Toolbar"
 	static EnabledItem := "Enabled"
 	static ExitItem := ""
 	static FeedbackDuration := 800
@@ -15,6 +18,8 @@ class SmartTrayController {
 	static PluginItems := Map()
 	static PluginCallbacks := Map()
 	static PauseCallback := 0
+	static ProfileMenuCallback := 0
+	static ToolbarMenuCallback := 0
 	static EnabledMenuCallback := 0
 	static ExitCallback := 0
 	static HideFeedbackCallback := 0
@@ -34,7 +39,10 @@ class SmartTrayController {
 		this.AppName := appName
 		this.ExitItem := "Exit " this.AppName
 		this.Paused := !this.ActiveByDefault
+		this.TargetProfile := SmartProfileManager.ActiveProfile
 		this.PauseCallback := pauseCallback
+		this.ProfileMenuCallback := ObjBindMethod(this, "IgnoreProfileItem")
+		this.ToolbarMenuCallback := ObjBindMethod(this, "ToggleToolbar")
 		this.EnabledMenuCallback := ObjBindMethod(this, "ToggleEnabled")
 		this.ExitCallback := ObjBindMethod(this, "ExitApplication")
 		this.HideFeedbackCallback := ObjBindMethod(this, "HideFeedback")
@@ -42,15 +50,20 @@ class SmartTrayController {
 		; Remove AutoHotkey's standard tray commands and expose only controls
 		; whose behaviour is owned by SmartInputVisuals itself.
 		A_TrayMenu.Delete()
+		this.ProfileItem := this.GetProfileItemText(this.TargetProfile)
+		A_TrayMenu.Add(this.ProfileItem, this.ProfileMenuCallback)
+		A_TrayMenu.Add()
 		this.BuildPluginMenu()
 		if this.PluginItems.Count > 0
 			A_TrayMenu.Add()
+		A_TrayMenu.Add(this.ToolbarItem, this.ToolbarMenuCallback)
 		A_TrayMenu.Add(this.EnabledItem, this.EnabledMenuCallback)
 		A_TrayMenu.Add()
 		A_TrayMenu.Add(this.ExitItem, this.ExitCallback)
 		A_IconTip := this.AppName
 
 		this.Refresh(true)
+		this.RefreshToolbar()
 		this.RefreshEnabled()
 	}
 
@@ -70,10 +83,36 @@ class SmartTrayController {
 	}
 
 	static ValidateMenuItemName(itemName) {
+		if InStr(StrLower(itemName), StrLower(this.ProfileItemPrefix)) = 1
+			throw Error("Plugin display name '" itemName "' conflicts with the tray profile item.")
+		if StrLower(itemName) = StrLower(this.ToolbarItem)
+			throw Error("Plugin display name '" itemName "' conflicts with the tray Toolbar item.")
 		if StrLower(itemName) = StrLower(this.EnabledItem)
 			throw Error("Plugin display name '" itemName "' conflicts with the tray Enabled item.")
 		if StrLower(itemName) = StrLower(this.ExitItem)
 			throw Error("Plugin display name '" itemName "' conflicts with the tray Exit item.")
+	}
+
+
+	static GetProfileItemText(profile) {
+		profileName := SmartProfileManager.GetProfileName(profile)
+		if profileName = ""
+			profileName := "Default"
+		return this.ProfileItemPrefix profileName
+	}
+
+	static RefreshProfileItem(force := false) {
+		newItem := this.GetProfileItemText(this.TargetProfile)
+		if !force && newItem = this.ProfileItem
+			return
+
+		if this.ProfileItem != "" && newItem != this.ProfileItem
+			A_TrayMenu.Rename(this.ProfileItem, newItem)
+		this.ProfileItem := newItem
+	}
+
+	static IgnoreProfileItem(*) {
+		; Informational item only; intentionally performs no action.
 	}
 
 	static Update(state) {
@@ -101,7 +140,7 @@ class SmartTrayController {
 	}
 
 	static TogglePlugin(pluginName, *) {
-		if this.Paused || !PluginManager.IsPluginHealthy(pluginName)
+		if this.Paused || !PluginManager.IsPluginAvailable(pluginName)
 			return
 
 		enabled := false
@@ -114,6 +153,21 @@ class SmartTrayController {
 
 		this.Refresh(true)
 		this.ShowFeedback(pluginName, enabled)
+	}
+
+	static ToggleToolbar(*) {
+		if !SmartPluginToolbar.Initialised
+			return
+
+		SmartPluginToolbar.ToggleVisible()
+		this.RefreshToolbar()
+	}
+
+	static RefreshToolbar() {
+		if SmartPluginToolbar.IsVisible()
+			A_TrayMenu.Check(this.ToolbarItem)
+		else
+			A_TrayMenu.Uncheck(this.ToolbarItem)
 	}
 
 	static ToggleEnabled(*) {
@@ -149,20 +203,22 @@ class SmartTrayController {
 	static Refresh(force := false) {
 		profileKey := SmartProfileManager.GetProfileKey(this.TargetProfile)
 		profileChanged := profileKey != this.LastProfileKey
+		if force || profileChanged
+			this.RefreshProfileItem(force)
 
 		for info in this.PluginInfo {
 			itemName := this.PluginItems[info.Name]
-			healthy := PluginManager.IsPluginHealthy(info.Name)
+			available := PluginManager.IsPluginAvailable(info.Name)
 			enabled := false
 
-			if this.TargetProfile && healthy {
+			if this.TargetProfile && available {
 				enabled := SmartProfileManager.IsPluginEnabledForProfile(
 					this.TargetProfile,
 					info.Name
 				)
 			}
 
-			menuEnabled := !!(this.TargetProfile && healthy && !this.Paused)
+			menuEnabled := !!(this.TargetProfile && available && !this.Paused)
 			stateKey := (enabled ? "1" : "0") ":" (menuEnabled ? "1" : "0")
 
 			if !force
@@ -243,6 +299,9 @@ class SmartTrayController {
 		this.PluginInfo := []
 		this.PluginCallbacks.Clear()
 		this.PauseCallback := 0
+		this.ProfileMenuCallback := 0
+		this.ToolbarMenuCallback := 0
+		this.ProfileItem := ""
 		this.Initialised := false
 	}
 }

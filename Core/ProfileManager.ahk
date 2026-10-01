@@ -1,9 +1,9 @@
 ; SmartInputVisuals - application-specific plugin profiles
 ; Profiles select plugin states according to the focused and/or hovered window context.
 ;
-; The Default profile owns canonical PluginDefinition objects and the complete
-; baseline PluginStates Map. Application profiles use the same PluginStates shape
-; for optional true/false overrides and cannot redefine plugin metadata.
+; The Default profile owns PluginDefinitions as the explicit plugin-availability
+; whitelist. PluginStates supplies optional true/false states; a missing Default
+; state means OFF. States for non-whitelisted plugin names remain inert.
 
 class SmartProfileManager {
 	static SelectionMode := "HoverThenFocus"
@@ -61,7 +61,7 @@ class SmartProfileManager {
 			this.RegisteredPlugins[StrLower(Trim(pluginName))] := true
 
 		this.ValidateSelectionMode(this.SelectionMode)
-		this.ValidatePluginConfiguration(registeredPluginNames)
+		this.ValidatePluginConfiguration()
 
 		profileNames := Map()
 
@@ -166,7 +166,7 @@ class SmartProfileManager {
 	}
 
 	static IsPluginEnabledForProfile(profile, pluginName) {
-		if !profile || !this.IsPluginRegistered(pluginName)
+		if !profile || !this.IsPluginRegistered(pluginName) || !this.GetPluginDefinition(pluginName)
 			return false
 
 		runtimeMap := this.GetRuntimePluginMap(profile, false)
@@ -205,7 +205,7 @@ class SmartProfileManager {
 	static TogglePluginForProfile(profile, pluginName, &enabled) {
 		enabled := false
 
-		if !profile || !this.IsPluginRegistered(pluginName)
+		if !profile || !this.IsPluginRegistered(pluginName) || !this.GetPluginDefinition(pluginName)
 			return false
 
 		enabled := !this.IsPluginEnabledForProfile(profile, pluginName)
@@ -264,7 +264,7 @@ class SmartProfileManager {
 		return definition && definition.DisplayName != "" ? definition.DisplayName : Trim(pluginName)
 	}
 
-	static ValidatePluginConfiguration(registeredPluginNames) {
+	static ValidatePluginConfiguration() {
 		if !this.DefaultProfile
 			throw Error("SmartInputVisuals requires one Default profile.")
 
@@ -294,46 +294,17 @@ class SmartProfileManager {
 			displayNames[displayKey] := pluginName
 		}
 
-		for pluginName in registeredPluginNames {
-			if !definitions.Has(pluginName) {
-				throw Error(
-					"Default profile has no definition for registered plugin '"
-					pluginName "'."
-				)
-			}
-		}
-
-		; Default.PluginStates is the complete baseline. Application profiles use
-		; the same structure but may omit plugins to inherit that baseline.
+		; PluginDefinitions is the availability whitelist. A registered plugin that
+		; is absent here is intentionally unavailable and is not a configuration error.
+		; Missing Default PluginStates entries are valid and resolve to OFF.
 		defaultStates := this.GetPluginStates(this.DefaultProfile, true)
 
-		for pluginName in definitions {
-			if !defaultStates.Has(pluginName) {
-				throw Error(
-					"Default profile PluginStates has no state for plugin '"
-					pluginName "'."
-				)
-			}
-		}
-
-		for pluginName in defaultStates {
-			if !definitions.Has(pluginName) {
-				throw Error(
-					"Unknown plugin '" pluginName "' in Default PluginStates."
-				)
-			}
-		}
-
+		; PluginStates entries outside the whitelist are intentionally inert. This
+		; allows a plugin to be made unavailable simply by removing its definition,
+		; without editing its preserved states in every profile.
 		for profile in this.Profiles {
 			states := this.GetPluginStates(profile, profile = this.DefaultProfile)
 			for pluginName, setting in states {
-				if !definitions.Has(pluginName) {
-					throw Error(
-						"Unknown plugin '" pluginName "' in profile '"
-						this.GetProfileName(profile) "'."
-					)
-				}
-
 				if Type(setting) != "Integer" || (setting != 0 && setting != 1) {
 					throw Error(
 						"Plugin state '" pluginName "' in profile '"

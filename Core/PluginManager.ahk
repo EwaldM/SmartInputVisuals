@@ -29,13 +29,10 @@ class PluginManager {
 		if name = ""
 			throw Error("SmartInputVisuals plugin names must not be empty.")
 
+		; Registration means the implementation is present. PluginDefinitions is a
+		; separate availability whitelist, so a missing definition is valid and
+		; leaves the registered plugin unavailable.
 		definition := SmartProfileManager.GetPluginDefinition(name)
-		if !definition {
-			throw Error(
-				"No Default-profile PluginDefinition exists for plugin '"
-				name "'."
-			)
-		}
 
 		for record in this.Plugins {
 			if StrLower(record.Name) = StrLower(name)
@@ -64,15 +61,26 @@ class PluginManager {
 		for record in this.Plugins {
 			plugins.Push({
 				Name: record.Name,
-				DisplayName: SmartProfileManager.GetPluginDisplayName(record.Name)
+				DisplayName: SmartProfileManager.GetPluginDisplayName(record.Name),
+				Defined: !!record.Definition
 			})
 		}
 		return plugins
 	}
 
+	static IsPluginDefined(pluginName) {
+		record := this.FindRecord(pluginName)
+		return !!(record && record.Definition)
+	}
+
 	static IsPluginHealthy(pluginName) {
 		record := this.FindRecord(pluginName)
 		return !!(record && record.Healthy)
+	}
+
+	static IsPluginAvailable(pluginName) {
+		record := this.FindRecord(pluginName)
+		return !!(record && record.Definition && record.Healthy)
 	}
 
 	static FindRecord(pluginName) {
@@ -91,7 +99,9 @@ class PluginManager {
 		this.Initialised := true
 
 		for record in this.Plugins {
-			if !record.Healthy
+			; A registered implementation without a PluginDefinition is deliberately
+			; unavailable and therefore never initialised or dispatched.
+			if !record.Definition || !record.Healthy
 				continue
 
 			record.Initialised := true
@@ -193,6 +203,9 @@ class PluginManager {
 		; tray-icon clicks must not produce OSD text, ripples, halos or drag visuals.
 		if state.HoverIsTraySurface
 			return "TraySurface"
+
+		if state.HoverIsHostSurface
+			return "HostSurface"
 
 		if !SmartProfileManager.IsPluginEnabled(record.Name) {
 			if SmartProfileManager.HasRuntimePluginState(record.Name)

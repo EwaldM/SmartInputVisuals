@@ -11,15 +11,30 @@ class SmartAppScope {
 	static LastHoverProcess := ""
 	static LastHoverClass := ""
 	static OwnProcessId := 0
+	static HostWindows := Map()
 
 	static Init() {
 		this.OwnProcessId := ProcessExist()
+		this.HostWindows.Clear()
 		this.MatchMode(this.DefaultMode, false, false)
 	}
 
+	static RegisterHostWindow(hwnd) {
+		if hwnd
+			this.HostWindows[hwnd] := true
+	}
+
+	static UnregisterHostWindow(hwnd) {
+		if hwnd && this.HostWindows.Has(hwnd)
+			this.HostWindows.Delete(hwnd)
+	}
+
 	static Update(state) {
-		activeHwnd := WinExist("A")
-		hoverHwnd := this.ResolveHoverWindow(state.HoverHwnd, state.X, state.Y)
+		rawActiveHwnd := WinExist("A")
+		rawHoverHwnd := state.HoverHwnd
+		activeHwnd := this.ResolveActiveWindow(rawActiveHwnd)
+		state.HoverIsHostSurface := this.IsHostSurface(rawHoverHwnd)
+		hoverHwnd := this.ResolveHoverWindow(rawHoverHwnd, state.X, state.Y)
 
 		if activeHwnd != this.LastActiveHwnd {
 			this.LastActiveHwnd := activeHwnd
@@ -105,6 +120,48 @@ class SmartAppScope {
 		}
 
 		return false
+	}
+
+	static IsHostSurface(hwnd) {
+		if !hwnd
+			return false
+
+		rootHwnd := DllCall(
+			"user32\GetAncestor",
+			"Ptr", hwnd,
+			"UInt", 2,
+			"Ptr"
+		)
+		if !rootHwnd
+			rootHwnd := hwnd
+
+		return this.HostWindows.Has(rootHwnd)
+	}
+
+	static ResolveActiveWindow(hwnd) {
+		if !hwnd
+			return 0
+
+		rootHwnd := DllCall(
+			"user32\GetAncestor",
+			"Ptr", hwnd,
+			"UInt", 2,
+			"Ptr"
+		)
+		if !rootHwnd
+			rootHwnd := hwnd
+
+		if this.GetWindowProcessId(rootHwnd) != this.OwnProcessId
+			return rootHwnd
+
+		; Interactive SmartInputVisuals windows, such as the plugin toolbar,
+		; must not replace the external application context when clicked.
+		if this.LastActiveHwnd
+			&& DllCall("user32\IsWindow", "Ptr", this.LastActiveHwnd, "Int")
+			&& this.GetWindowProcessId(this.LastActiveHwnd) != this.OwnProcessId
+			return this.LastActiveHwnd
+
+		return 0
 	}
 
 	static GetProcessName(hwnd) {

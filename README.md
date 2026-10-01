@@ -15,6 +15,7 @@ SmartInputVisuals is an AutoHotkey v2 input-visualisation host with optional sam
 - application focus/hover filtering
 - application-specific plugin profiles
 - dynamic per-profile tray toggles for installed plugins
+- compact always-on-top plugin toolbar with current-profile title
 - global tray enable/disable control with zero host polling while disabled
 - pause visualisations while ordinary keyboard typing is active
 - one shared 20 ms input/presentation timer
@@ -49,6 +50,7 @@ SmartInputVisuals/
 │  ├─ OverlayRegistry.ahk
 │  ├─ PluginDefinition.ahk
 │  ├─ PluginManager.ahk
+│  ├─ PluginToolbar.ahk
 │  ├─ ProfileManager.ahk
 │  ├─ SharedTheme.ahk
 │  └─ TrayController.ahk
@@ -179,7 +181,7 @@ The default magnification is the integer factor `2.0`, which maps source pixels 
 
 `MagnifierLens` deliberately uses the Windows Magnification API rather than a custom Direct3D capture pipeline with bicubic-style filtering. The latter could offer more control over resampling, but would add substantial capture, GPU and resource-management complexity for limited benefit in this lightweight overlay host.
 
-`Core/OverlayRegistry.ahk` tracks SmartInputVisuals' top-level overlay windows. `MagnifierLens` supplies that list to the Windows magnifier filter so `KeyPressOSD`, `PointerHalo`, `ClickRipples`, `DragIndicator` and the lens host itself are excluded from the magnified source. Existing visual indicators therefore remain crisp above the lens instead of appearing a second time inside it. The filter list is refreshed only when the registered overlay-window set changes.
+`Core/OverlayRegistry.ahk` tracks SmartInputVisuals' top-level overlay windows. `MagnifierLens` supplies that list to the Windows magnifier filter so `KeyPressOSD`, `PointerHalo`, `ClickRipples`, `DragIndicator`, the plugin toolbar and the lens host itself are excluded from the magnified source. Existing visual indicators and host controls therefore remain crisp above the lens instead of appearing a second time inside it. The filter list is refreshed only when the registered overlay-window set changes.
 
 The lens uses the shared host timer and refreshes at most every `UpdateInterval` milliseconds; it does not create a separate polling timer. It is hidden immediately when profile, application scope, display scope, typing suppression, tray-surface suppression or the global `Enabled` switch makes the plugin ineligible.
 
@@ -226,7 +228,7 @@ Plugins may override the default application scope mode with `static ScopeMode :
 
 There is no separate application allow-list in `AppScope`. Where visualisations are available is controlled by `Profiles/Default.ahk` and the enabled application-specific profiles in `Profiles/AppProfiles.ahk`.
 
-Process names and window classes are cached and are resolved again only when the relevant window handle changes. SmartInputVisuals' own topmost click-through windows are skipped when resolving the application beneath the pointer. Visual plugins are suppressed over Windows taskbar/notification-area surfaces, so clicking tray icons never produces SmartInputVisuals visualisations.
+Process names and window classes are cached and are resolved again only when the relevant window handle changes. SmartInputVisuals' own topmost windows are skipped when resolving the application beneath the pointer. Interactive host windows such as the plugin toolbar preserve the underlying external application/profile instead of becoming a profile-selection target themselves, and visual plugins are suppressed while the pointer is over that host UI. Visual plugins are also suppressed over Windows taskbar/notification-area surfaces, so clicking tray icons never produces SmartInputVisuals visualisations.
 
 ### Client-area display restriction
 
@@ -265,29 +267,60 @@ Supported selection modes:
 
 For every selected application/window context, an application-specific profile is used when one is registered; otherwise the `Default` profile is used immediately. This means moving the pointer from a profiled application to an unprofiled application switches to the Default profile without requiring a focus change.
 
+### Toolbar configuration
+
+`Profiles/Default.ahk` defines the toolbar's startup position, shared opacity and RGB colours together:
+
+```ahk
+static Toolbar := {
+    X: 20,
+    Y: 20,
+    Opacity: 170,
+    ShowProfileName: true,
+    Layout: "H",
+    ButtonHeight: 44,
+    ButtonPaddingX: 14,
+    ButtonSpacing: 6,
+    BackgroundColor: 0x202020,
+    ButtonColor: 0x404040,
+    TextColor: 0xFFFFFF
+}
+```
+
+`X` and `Y` are the initial screen coordinates. Positioning uses the toolbar HWND directly, so the configured position is applied even while the GUI is initially hidden. `Opacity` uses the Windows transparency range `1..255`, where `255` is fully opaque and lower values make the complete toolbar more translucent; the default is `170`. `ShowProfileName: true` shows the active profile name in the toolbar title. When set to `false`, the title shows the SmartInputVisuals application name, i.e. the same name used by the `Exit SmartInputVisuals` tray item. `Layout` accepts the deliberately short values `"H"` (horizontal) and `"V"` (vertical). AutoHotkey has no native enum type, so the two validated string values keep the configuration concise without introducing opaque numeric constants. In horizontal layout, buttons remain in one row and use individual widths. In vertical layout, buttons form one column and all use the width required by the longest button caption. The title never determines the toolbar width; if its text is longer than the width established by the buttons, it is truncated with an ellipsis.
+
+`ButtonHeight`, `ButtonPaddingX` and `ButtonSpacing` are optional touch-oriented sizing settings. The supplied Default profile uses `44`, `14` and `6` respectively to provide larger touch targets and more separation. They may be removed independently for backward-compatible behaviour: missing `ButtonHeight` falls back to the previous `26` px height, missing `ButtonSpacing` falls back to the previous `4` px gap, and missing `ButtonPaddingX` preserves the original width formula exactly (`Max(64, 20 + textWidth)`) rather than inventing an equivalent padding value. When `ButtonPaddingX` is configured, the calculated text width receives that many pixels of padding on both the left and right sides. The same sizing rules apply to horizontal and vertical layouts; vertical layout still makes all buttons as wide as the longest required caption.
+
+`BackgroundColor` sets the toolbar/title background, `ButtonColor` sets the plugin-button face, and `TextColor` is used for both the title and button captions. Colours are `0xRRGGBB` integer values. The buttons remain normal AutoHotkey `Button` controls for interaction. SmartInputVisuals explicitly changes their Win32 button type to `BS_OWNERDRAW` and handles `WM_DRAWITEM`, allowing `ButtonColor` and `TextColor` to control their painted appearance while retaining normal button click/focus behaviour. The toolbar is clamped to the virtual desktop when it starts. Dragging the title area moves the toolbar for the current session only; SmartInputVisuals does not rewrite `Default.ahk`.
+
 ### Plugin definitions and profile states
 
-`Profiles/Default.ahk` owns the canonical definition for every plugin. The `PluginDefinitions` Map key is the sole stable internal plugin name; it is not repeated inside the definition object:
+**`PluginDefinitions` is the explicit availability whitelist for plugins.** A plugin implementation can be present and register successfully without appearing in this Map; in that case it remains unavailable, is not initialised, does not appear on the toolbar, and is shown disabled in the tray/context menu. This makes removing one definition sufficient to take a plugin out of service without changing its source or deleting its preserved profile states.
+
+`Profiles/Default.ahk` owns this whitelist. The `PluginDefinitions` Map key is the sole stable internal plugin name; it is not repeated inside the definition object:
 
 ```ahk
 static PluginDefinitions := Map(
-    "KeyPressOSD", PluginDefinition("KeyPressOSD"),
-    "ClickRipples", PluginDefinition("ClickRipples")
+    "KeyPressOSD", PluginDefinition("Keys"),
+    "PointerHalo", PluginDefinition("Halo"),
+    "ClickRipples", PluginDefinition("Clicks"),
+    "DragIndicator", PluginDefinition("Drag"),
+    "MagnifierLens", PluginDefinition("Lens")
 )
 ```
 
-A `PluginDefinition` currently contains only `DisplayName`. The included Default profile deliberately repeats the plugin name as the display name for clarity:
+A `PluginDefinition` currently contains only `DisplayName`:
 
 ```text
-PluginDefinitions Map key = internal/canonical plugin name
+PluginDefinitions Map key = internal/canonical plugin name and whitelist membership
 PluginDefinition.DisplayName = user-facing name
 ```
 
-An empty `DisplayName` is still accepted; the effective display name then falls back to the Map key.
+An empty `DisplayName` is accepted; the effective display name then falls back to the Map key. A registered plugin with no definition therefore also falls back to its registered internal name in the disabled tray entry.
 
 Although `PluginDefinition` currently wraps only one property, the class is intentionally retained rather than replacing definitions with plain strings. It gives plugin metadata an explicit type, keeps validation and configuration self-describing, and provides a stable extension point if genuine plugin-level metadata is added later. Such additions can then be made without changing the `PluginDefinitions` Map shape or conflating metadata with profile state.
 
-Enable/disable state is deliberately **not** part of `PluginDefinition`, because it is profile configuration rather than plugin identity. Every profile uses a `PluginStates` Map. The Default profile supplies the complete baseline:
+Enable/disable state is deliberately **not** part of `PluginDefinition`, because it is profile configuration rather than plugin identity. Every profile uses a `PluginStates` Map. The Default profile supplies explicit baseline states where needed:
 
 ```ahk
 static PluginStates := Map(
@@ -299,17 +332,17 @@ static PluginStates := Map(
 )
 ```
 
-Every plugin in `PluginDefinitions` must have a corresponding Default `PluginStates` entry, and Default `PluginStates` may not contain unknown plugin names. This makes the baseline unambiguous.
+For a whitelisted plugin, a missing entry in Default `PluginStates` means **OFF**. Application profiles may still override that default. `PluginStates` entries for names which are currently outside the `PluginDefinitions` whitelist are intentionally inert rather than erroneous; they can remain in Default or application profiles and become effective again if that plugin is later added back to the whitelist.
 
 Plugin source files are loaded by the host through the optional `#Include` directives in `SmartInputVisuals.ahk`. A plugin implemented by several source files keeps that structure inside its own source using further `#Include` directives; source paths are intentionally not part of `PluginDefinition`.
 
-`Default.ahk` is authoritative and fail-closed: every registered plugin must have a `PluginDefinition`, duplicate effective display names are rejected, and registered plugin names without definitions cause startup errors. Definitions and Default states for optional plugin files may remain even when those files are not installed.
+Definitions for optional plugin source files may remain in the whitelist even when those files are not installed; without registration there is simply no runtime plugin to list or initialise. Duplicate effective display names among definitions are rejected.
 
 The included Default profile enables only `ClickRipples` by default.
 
 ### Application-profile states
 
-Application profiles use the **same `PluginStates` structure** as the Default profile, but their Maps are partial: they contain only states that differ from or explicitly restate the Default baseline. They cannot redefine `DisplayName` or other plugin metadata.
+Application profiles use the **same `PluginStates` structure** as the Default profile, but their Maps are partial: they contain only states that differ from or explicitly restate the Default baseline. They cannot redefine `DisplayName` or other plugin metadata, and entries for plugins outside the current whitelist remain inert.
 
 Example:
 
@@ -328,7 +361,7 @@ class PowerPointProfile {
 }
 ```
 
-An application-specific profile is enabled when `Enabled` is omitted; add `static Enabled := false` to disable it. Plugin names omitted from an application profile's `PluginStates` inherit the corresponding state from the Default profile. State values must be simple `true`/`false` values.
+An application-specific profile is enabled when `Enabled` is omitted; add `static Enabled := false` to disable it. Plugin names omitted from an application profile's `PluginStates` inherit the corresponding Default state; if that Default state is also omitted, the plugin is OFF. State values must be simple `true`/`false` values.
 
 Simple `Applications` entries are executable-name strings matched case-insensitively. A class-specific entry can instead use `Map("Process", "...", "Class", "...")`; it takes precedence over a process-only mapping for the same executable. Duplicate process-only mappings and duplicate process/class mappings are rejected during startup.
 
@@ -368,17 +401,32 @@ Useful `explorer.exe` window classes for profile matching:
 
 Taskbar classes are normally handled by SmartInputVisuals' built-in tray/taskbar exclusion rather than by application profiles.
 
+### Plugin toolbar
+
+`Core/PluginToolbar.ahk` provides a compact always-on-top toolbar. It is built from the **available** registered plugins, so buttons appear in plugin registration order and use each plugin's `DisplayName`. Registered plugins which are outside the `PluginDefinitions` whitelist, or which are unhealthy, are not shown on the toolbar.
+
+The toolbar title is left-aligned above the buttons. By default it shows the current profile name; `ShowProfileName: false` switches it to the SmartInputVisuals application name. `Layout: "H"` places the buttons in the current horizontal row. `Layout: "V"` places them in a vertical column with one common width based on the longest button caption, which is more suitable for longer display names. The title uses the width established by the buttons and is truncated with an ellipsis when necessary rather than widening the toolbar. The entire title region remains the drag handle; the button area itself does not drag the window. The toolbar has no close button. Its visibility is controlled only by the single `Toolbar` item in the tray menu, which is checked while the toolbar is visible. The toolbar starts visible by default.
+
+Button captions intentionally use a compact textual state:
+
+```text
+✓ Keys    enabled for the current profile
+  Halo    disabled for the current profile
+```
+
+Unavailable plugins are omitted from the toolbar entirely. Available buttons toggle the same session-only per-profile runtime state used by the tray menu. While SmartInputVisuals is globally paused, the buttons are disabled but retain their ON/OFF captions. The toolbar uses `WS_EX_NOACTIVATE`, so clicking it does not intentionally steal focus from the controlled application. It is also registered as a SmartInputVisuals host surface: profile resolution looks through it to the external application beneath it, while plugin mouse visualisations are suppressed over the toolbar itself.
+
 ### Per-profile plugin toggles
 
-The tray menu builds one session-only runtime toggle for every registered plugin. Optional plugin files that are absent are not listed. Items appear in plugin registration order. Plugin registration supplies the stable internal name; the matching `PluginDefinition` supplies the user-facing display name.
+The tray menu builds one entry for every registered plugin. Optional plugin files that are absent are not listed. Items appear in plugin registration order. For whitelisted plugins, the matching `PluginDefinition` supplies the user-facing display name; registered plugins outside the whitelist fall back to their internal registration name.
 
 - Each toggle targets the profile of the foreground application/window context. Entering the taskbar, notification area or tray popup preserves the previously captured target instead of switching to a shell profile. Desktop and File Explorer windows resolve normally.
 - A check mark shows the plugin's effective state for the target profile. A profile value of `false` means initially unchecked, not unavailable, so the item remains enabled and can be switched on for the current session.
-- A plugin that becomes unhealthy after a callback error remains listed but is unchecked and disabled. While SmartInputVisuals is globally paused, all plugin toggles are disabled but retain their checked states.
+- A registered plugin outside the `PluginDefinitions` whitelist remains listed but is unchecked and disabled. A plugin that becomes unhealthy after a callback error behaves the same way. Neither condition produces a toolbar button. While SmartInputVisuals is globally paused, all available plugin toggles are disabled but retain their checked states.
 - An accepted toggle briefly shows `<DisplayName>: ON` or `<DisplayName>: OFF` near the pointer.
 - Runtime toggle states are stored separately for each profile, kept only for the current SmartInputVisuals session and reset when the script restarts.
 
-The included definitions explicitly repeat each internal plugin name as its `DisplayName` for clarity. Change the `PluginDefinition("...")` value when a friendlier tray caption is required; passing an empty string still falls back to the `PluginDefinitions` Map key.
+The included definitions use concise display names (`Keys`, `Halo`, `Clicks`, `Drag`, `Lens`). Change the `PluginDefinition("...")` value to customise the user-facing tray and toolbar text; passing an empty string still falls back to the `PluginDefinitions` Map key.
 
 ### Global enable toggle
 
@@ -386,7 +434,7 @@ The tray menu also provides `Enabled` as the global master switch, independent o
 
 The `Enabled` item is checked while SmartInputVisuals is active and unchecked while it is paused. Startup behaviour is configurable in `Core/TrayController.ahk` with `static ActiveByDefault := true`; set it to `false` to start paused/unchecked. Plugin toggles appear before the global switch. While globally paused, plugin toggles are disabled but keep their checked states, and the tray icon tooltip appends `(Paused)` to the configured `APP_NAME`. Re-enabling SmartInputVisuals restores the same per-profile plugin states.
 
-The tray menu groups per-profile plugin toggles first, in plugin registration order, then the global `Enabled` master switch, followed by Exit. AutoHotkey's standard `Suspend Hotkeys` and `Pause Script` entries are intentionally removed in favour of these SmartInputVisuals-specific controls.
+The tray menu begins with a normal-looking informational item such as `Profile: PowerPoint`, followed by a separator. Selecting that item intentionally performs no action. This shows the profile currently targeted by the tray plugin toggles. Per-profile plugin toggles follow in plugin registration order, then `Toolbar`, the global `Enabled` master switch, and Exit. `Toolbar` is a single checked/unchecked item rather than a submenu. AutoHotkey's standard `Suspend Hotkeys` and `Pause Script` entries are intentionally removed in favour of these SmartInputVisuals-specific controls.
 
 When the effective configured profile state disables an already-visible plugin, the manager sends one `Deactivated("Profile", state)` callback so the plugin can clear its visualisation, then stops dispatching normal callbacks to it. If any plugin is switched off with its runtime toggle, it receives `Deactivated("RuntimeToggle", state)` and is likewise skipped until that profile's runtime toggle is enabled again.
 
@@ -395,12 +443,13 @@ When the effective configured profile state disables an already-visible plugin, 
 The manager applies eligibility centrally in this order:
 
 1. taskbar/notification-area exclusion
-2. effective per-profile plugin state (`PluginStates` plus any session override)
-3. focus/hover application scope
-4. client-area display scope
-5. pause-while-typing policy
+2. SmartInputVisuals interactive-host-UI exclusion
+3. effective per-profile plugin state (`PluginStates` plus any session override)
+4. focus/hover application scope
+5. client-area display scope
+6. pause-while-typing policy
 
-All registered plugins are initialised at startup. `Default.PluginStates` supplies the baseline active state, application profiles may override it, and each registered plugin's tray toggle can override the effective profile state for the session. If a plugin callback throws an error, only that plugin is marked unhealthy, shut down and removed from further dispatch; the other plugins continue running and the failed plugin's tray item becomes disabled.
+Only registered plugins that are present in the `PluginDefinitions` whitelist are initialised at startup. A missing Default `PluginStates` entry means OFF, application profiles may override the Default state, and each available plugin's tray or toolbar toggle can override the effective profile state for the session. Registered but non-whitelisted plugins remain unavailable without an error. If a plugin callback throws an error, only that plugin is marked unhealthy, shut down and removed from further dispatch; the other plugins continue running, the failed plugin disappears from the toolbar, and its tray item becomes disabled.
 
 For profile, runtime-toggle, scope or typing transitions, an active plugin may receive one `Deactivated(reason, state)` cleanup callback. Once blocked, it receives no `WantsTick`, `Tick`, `MouseDown` or `MouseUp` calls.
 

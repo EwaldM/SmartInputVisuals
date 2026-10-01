@@ -9,10 +9,10 @@
 ; names and window classes are matched case-insensitively. A class-specific match
 ; takes precedence over a process-only match for the same executable.
 ;
-; Plugin metadata and baseline states are defined in Default.ahk. Every profile uses
-; the same PluginStates structure: Default contains a complete baseline Map, while
-; application profiles may contain only the true/false states they want to override.
-; Omitted plugin names inherit the corresponding state from Default.
+; Plugin availability and baseline states are defined in Default.ahk. PluginDefinitions
+; is the availability whitelist. Every profile uses the same PluginStates structure.
+; A missing Default state means OFF. Application states for names outside the whitelist
+; remain inert, and omitted application states inherit the corresponding Default state.
 ;
 ; Keep application-specific configuration here rather than in the plugins so
 ; visual plugins remain reusable and profile selection stays centralised.

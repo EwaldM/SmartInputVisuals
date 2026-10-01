@@ -26,6 +26,7 @@ class SmartInputState {
 	HoverClass := ""
 	ActiveClass := ""
 	HoverIsTraySurface := false
+	HoverIsHostSurface := false
 	DisplayAllowed := true
 
 	ProfileProcess := ""

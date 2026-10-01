@@ -15,6 +15,7 @@
 #Include Core\PluginDefinition.ahk
 #Include Core\ProfileManager.ahk
 #Include Core\DisplayScope.ahk
+#Include Core\PluginToolbar.ahk
 #Include Core\TrayController.ahk
 #Include Core\PluginManager.ahk
 
@@ -58,6 +59,12 @@ try {
 	SmartDpiContext.Restore(pluginDpiContext)
 }
 
+; Plugin initialisation can mark individual plugins unhealthy. Refresh the tray
+; immediately so unavailable items are disabled before the first host timer tick.
+SmartTrayController.Refresh(true)
+SmartPluginToolbar.Init(ApplicationPaused)
+SmartTrayController.RefreshToolbar()
+
 if !ApplicationPaused
 	SetTimer(AppTick, APP_POLL_INTERVAL)
 
@@ -74,6 +81,7 @@ AppTick() {
 		SmartProfileManager.Update(AppState)
 		SmartDisplayScope.Update(AppState)
 		SmartTrayController.Update(AppState)
+		SmartPluginToolbar.Update(AppState)
 		PluginManager.Process(AppState)
 	} finally {
 		SmartDpiContext.Restore(previousDpiContext)
@@ -88,6 +96,7 @@ SetApplicationPaused(paused) {
 		return
 
 	ApplicationPaused := paused
+	SmartPluginToolbar.SetPaused(paused)
 
 	if paused {
 		SetTimer(AppTick, 0)
@@ -115,6 +124,7 @@ ShutdownApplication(*) {
 	SetTimer(AppTick, 0)
 
 	SmartTrayController.Shutdown()
+	SmartPluginToolbar.Shutdown()
 	PluginManager.Shutdown()
 	SmartInputActivity.Shutdown()
 	GDIPlusHost.Shutdown()
