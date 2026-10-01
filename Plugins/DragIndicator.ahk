@@ -2,8 +2,7 @@
 ; Shows a straight dashed drag line with an arrowhead at the current position.
 
 class DragIndicatorPlugin {
-
-	static DragThreshold := 6
+	static DragThreshold := 20
 	static StrokeWidth := 3.0
 	static ArrowLength := 15.0
 	static ArrowHalfWidth := 7.0
@@ -52,9 +51,11 @@ class DragIndicatorPlugin {
 	static Init() {
 		this.Gui := Gui("+AlwaysOnTop -Caption +ToolWindow +E0x08080020")
 		this.Gui.Show("Hide w1 h1 x0 y0")
+		SmartOverlayRegistry.Register(this.Gui.Hwnd)
 
 		this.RetiredGui := Gui("+AlwaysOnTop -Caption +ToolWindow +E0x08080020")
 		this.RetiredGui.Show("Hide w1 h1 x0 y0")
+		SmartOverlayRegistry.Register(this.RetiredGui.Hwnd)
 
 		this.CreatePens()
 	}
@@ -652,11 +653,13 @@ class DragIndicatorPlugin {
 		this.SolidPens.Clear()
 
 		if this.Gui {
+			SmartOverlayRegistry.Unregister(this.Gui.Hwnd)
 			this.Gui.Destroy()
 			this.Gui := 0
 		}
 
 		if this.RetiredGui {
+			SmartOverlayRegistry.Unregister(this.RetiredGui.Hwnd)
 			this.RetiredGui.Destroy()
 			this.RetiredGui := 0
 		}

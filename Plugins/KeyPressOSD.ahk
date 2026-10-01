@@ -2,7 +2,6 @@
 ; Original text OSD functionality, implemented as an optional same-process plugin.
 
 class KeyPressOSDPlugin {
-
 	static OSDHoldDuration := 700
 	static OffsetX := 30
 	static OffsetY := -35
@@ -39,6 +38,7 @@ class KeyPressOSDPlugin {
 	static Init() {
 		this.Gui := Gui("+AlwaysOnTop -Caption +ToolWindow +E0x08080020")
 		this.Gui.Show("Hide w1 h1 x0 y0")
+		SmartOverlayRegistry.Register(this.Gui.Hwnd)
 
 		this.CreateTextResources()
 		this.CreateRenderSurface()
@@ -532,6 +532,7 @@ class KeyPressOSDPlugin {
 		}
 
 		if this.Gui {
+			SmartOverlayRegistry.Unregister(this.Gui.Hwnd)
 			this.Gui.Destroy()
 			this.Gui := 0
 		}

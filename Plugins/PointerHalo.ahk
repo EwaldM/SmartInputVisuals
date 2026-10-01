@@ -26,6 +26,7 @@ class PointerHaloPlugin {
 	static Init() {
 		this.Gui := Gui("+AlwaysOnTop -Caption +ToolWindow +E0x08080020")
 		this.Gui.Show("Hide w1 h1 x0 y0")
+		SmartOverlayRegistry.Register(this.Gui.Hwnd)
 
 		this.CreateSurface()
 		this.CreatePens()
@@ -314,6 +315,7 @@ class PointerHaloPlugin {
 		}
 
 		if this.Gui {
+			SmartOverlayRegistry.Unregister(this.Gui.Hwnd)
 			this.Gui.Destroy()
 			this.Gui := 0
 		}

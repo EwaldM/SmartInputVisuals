@@ -2,7 +2,7 @@
 
 [![Licence: CC BY 4.0](https://img.shields.io/badge/Licence-CC_BY_4.0-lightgrey.svg)](https://creativecommons.org/licenses/by/4.0/)
 
-SmartInputVisuals is an AutoHotkey v2 input-visualisation host with optional same-process plugins for text OSD, pointer highlighting, click ripples and drag visualisation.
+SmartInputVisuals is an AutoHotkey v2 input-visualisation host with optional same-process plugins for text OSD, pointer highlighting, click ripples, drag visualisation and a magnifier lens.
 
 ## Features
 
@@ -10,14 +10,22 @@ SmartInputVisuals is an AutoHotkey v2 input-visualisation host with optional sam
 - `PointerHalo` — hollow pointer halo with idle fade
 - `ClickRipples` — expanding concentric click rings
 - `DragIndicator` — dashed drag line with an arrowhead
+- `MagnifierLens` — configurable click-through magnifier lens around the pointer
 - globally shared mouse-button colours
 - application focus/hover filtering
 - application-specific plugin profiles
+- dynamic per-profile tray toggles for installed plugins
 - global tray enable/disable control with zero host polling while disabled
 - pause visualisations while ordinary keyboard typing is active
 - one shared 20 ms input/presentation timer
 - central GDI+ lifetime management
 - no external libraries
+
+## Screen sharing
+
+When sharing an entire desktop or monitor in Microsoft Teams or Zoom, SmartInputVisuals overlays are normally included because they are ordinary top-level windows and are not marked for capture exclusion. When sharing a single application window, they are normally not included because the overlays belong to the AutoHotkey process rather than the shared application. File-based presentation modes such as PowerPoint Live do not include them.
+
+Capture behaviour can vary: Teams and Zoom may use different capture backends depending on the Windows version, graphics hardware and application version. Test the intended sharing mode on the target system when reliable overlay visibility matters.
 
 ## Requirements
 
@@ -38,6 +46,8 @@ SmartInputVisuals/
 │  ├─ GDIPlusHost.ahk
 │  ├─ InputActivity.ahk
 │  ├─ InputState.ahk
+│  ├─ OverlayRegistry.ahk
+│  ├─ PluginDefinition.ahk
 │  ├─ PluginManager.ahk
 │  ├─ ProfileManager.ahk
 │  ├─ SharedTheme.ahk
@@ -49,6 +59,7 @@ SmartInputVisuals/
    ├─ ClickRipples.ahk
    ├─ DragIndicator.ahk
    ├─ KeyPressOSD.ahk
+   ├─ MagnifierLens.ahk
    └─ PointerHalo.ahk
 ```
 
@@ -59,6 +70,8 @@ SmartInputVisuals/
 3. Run `SmartInputVisuals.ahk`.
 
 To start it with Windows, place a shortcut to `SmartInputVisuals.ahk` in the Startup folder (`Win + R`, then `shell:startup`).
+
+The application name used by the tray tooltip and `Exit ...` command is configured once in `SmartInputVisuals.ahk` with `APP_NAME := "SmartInputVisuals"`.
 
 ## Shared colours
 
@@ -132,7 +145,7 @@ static MaxActiveRipples := 6
 `Plugins/DragIndicator.ahk` displays a straight dashed line from the drag start point to the current pointer position. A solid arrowhead marks the current position, and the entire indicator uses the colour of the mouse button which started the drag.
 
 ```ahk
-static DragThreshold := 6
+static DragThreshold := 20
 static StrokeWidth := 3.0
 static ArrowLength := 15.0
 static ArrowHalfWidth := 7.0
@@ -143,6 +156,29 @@ static MinMovement := 2
 The indicator does not appear until the pointer has moved at least `DragThreshold` pixels, so ordinary clicks do not flash a line. Rendering is limited to roughly 30 FPS and movements below `MinMovement` pixels are ignored between rendered frames. After the drag ends, the final arrow line remains fully visible for `SmartInputVisualsTheme.IdleDelay`, then fades over `SmartInputVisualsTheme.FadeDuration`. If another drag starts drawing before that idle period finishes, the previous indicator starts fading immediately while the new drag is drawn at full opacity.
 
 DragIndicator normally uses one layered backing DIB. During the brief overlap between a fading completed drag and a newly drawn drag, a second temporary DIB retains the previous indicator independently; it is released as soon as the shared fade finishes. Surfaces otherwise remain short-lived, and a very long diagonal drag can still require a temporarily large backing surface because the bitmap must cover the line's bounding rectangle.
+
+## MagnifierLens
+
+`Plugins/MagnifierLens.ahk` provides a click-through lens using the Windows Magnification API. The lens follows the pointer while the plugin is eligible, but the pointer's relative position inside the lens is configurable. Lens geometry uses the same physical-pixel, mixed-DPI coordinate context as the other visual plugins.
+
+```ahk
+static Magnification := 2.0
+static LensWidth := 400
+static LensHeight := 600
+static PointerPositionX := 0.25
+static PointerPositionY := 0.25
+static UpdateInterval := 33
+```
+
+`PointerPositionX` and `PointerPositionY` use normalised values from `0.0` to `1.0`; `0.5 / 0.5` centres the pointer in the lens. The default `0.25 / 0.25` places it one quarter of the way from the left and top edges. Lens dimensions are physical screen pixels. The host GUI disables AutoHotkey DPI scaling so its client area and the native magnifier child use the same physical-pixel dimensions. Near virtual-desktop edges the lens is kept on-screen and the source rectangle is adjusted accordingly. The system pointer remains normal-sized rather than being magnified.
+
+The default magnification is the integer factor `2.0`, which maps source pixels more cleanly to output pixels and generally keeps rasterised text crisper than fractional factors. Fractional values remain supported: the source rectangle is rounded to whole desktop pixels and the transform is adjusted minimally per axis so that it fills the configured lens without a partial-pixel edge mismatch.
+
+`MagnifierLens` deliberately uses the Windows Magnification API rather than a custom Direct3D capture pipeline with bicubic-style filtering. The latter could offer more control over resampling, but would add substantial capture, GPU and resource-management complexity for limited benefit in this lightweight overlay host.
+
+`Core/OverlayRegistry.ahk` tracks SmartInputVisuals' top-level overlay windows. `MagnifierLens` supplies that list to the Windows magnifier filter so `KeyPressOSD`, `PointerHalo`, `ClickRipples`, `DragIndicator` and the lens host itself are excluded from the magnified source. Existing visual indicators therefore remain crisp above the lens instead of appearing a second time inside it. The filter list is refreshed only when the registered overlay-window set changes.
+
+The lens uses the shared host timer and refreshes at most every `UpdateInterval` milliseconds; it does not create a separate polling timer. It is hidden immediately when profile, application scope, display scope, typing suppression, tray-surface suppression or the global `Enabled` switch makes the plugin ineligible.
 
 ## Visuals while typing
 
@@ -183,7 +219,7 @@ Supported modes:
 | `FocusOrHover` | Either condition is sufficient |
 | `FocusAndHover` | The profile-selected application must both have focus and be under the pointer |
 
-Plugins may override the default application scope mode with `static ScopeMode := "..."`. `PointerHalo` defaults to `HoverOnly`; the other included plugins inherit `SmartAppScope.DefaultMode`.
+Plugins may override the default application scope mode with `static ScopeMode := "..."`. `PointerHalo` defaults to `HoverOnly`; the other included plugins, including `MagnifierLens`, inherit `SmartAppScope.DefaultMode`.
 
 There is no separate application allow-list in `AppScope`. Where visualisations are available is controlled by `Profiles/Default.ahk` and the enabled application-specific profiles in `Profiles/AppProfiles.ahk`.
 
@@ -226,48 +262,96 @@ Supported selection modes:
 
 For every selected application/window context, an application-specific profile is used when one is registered; otherwise the `Default` profile is used immediately. This means moving the pointer from a profiled application to an unprofiled application switches to the Default profile without requiring a focus change.
 
-`Profiles/Default.ahk` defines the fallback plugin defaults and enables only `ClickRipples` by default. `Profiles/AppProfiles.ahk` contains ready-to-adapt examples; the PowerPoint and Excel/Word examples are disabled, while the Desktop example is enabled by default.
+### Plugin definitions and profile states
 
-Example profile definition:
+`Profiles/Default.ahk` owns the canonical definition for every plugin. The `PluginDefinitions` Map key is the sole stable internal plugin name; it is not repeated inside the definition object:
+
+```ahk
+static PluginDefinitions := Map(
+    "KeyPressOSD", PluginDefinition("KeyPressOSD"),
+    "ClickRipples", PluginDefinition("ClickRipples")
+)
+```
+
+A `PluginDefinition` currently contains only `DisplayName`. The included Default profile deliberately repeats the plugin name as the display name for clarity:
+
+```text
+PluginDefinitions Map key = internal/canonical plugin name
+PluginDefinition.DisplayName = user-facing name
+```
+
+An empty `DisplayName` is still accepted; the effective display name then falls back to the Map key.
+
+Although `PluginDefinition` currently wraps only one property, the class is intentionally retained rather than replacing definitions with plain strings. It gives plugin metadata an explicit type, keeps validation and configuration self-describing, and provides a stable extension point if genuine plugin-level metadata is added later. Such additions can then be made without changing the `PluginDefinitions` Map shape or conflating metadata with profile state.
+
+Enable/disable state is deliberately **not** part of `PluginDefinition`, because it is profile configuration rather than plugin identity. Every profile uses a `PluginStates` Map. The Default profile supplies the complete baseline:
+
+```ahk
+static PluginStates := Map(
+    "KeyPressOSD", false,
+    "PointerHalo", false,
+    "ClickRipples", true,
+    "DragIndicator", false,
+    "MagnifierLens", false
+)
+```
+
+Every plugin in `PluginDefinitions` must have a corresponding Default `PluginStates` entry, and Default `PluginStates` may not contain unknown plugin names. This makes the baseline unambiguous.
+
+Plugin source files are loaded by the host through the optional `#Include` directives in `SmartInputVisuals.ahk`. A plugin implemented by several source files keeps that structure inside its own source using further `#Include` directives; source paths are intentionally not part of `PluginDefinition`.
+
+`Default.ahk` is authoritative and fail-closed: every registered plugin must have a `PluginDefinition`, duplicate effective display names are rejected, and registered plugin names without definitions cause startup errors. Definitions and Default states for optional plugin files may remain even when those files are not installed.
+
+The included Default profile enables only `ClickRipples` by default.
+
+### Application-profile states
+
+Application profiles use the **same `PluginStates` structure** as the Default profile, but their Maps are partial: they contain only states that differ from or explicitly restate the Default baseline. They cannot redefine `DisplayName` or other plugin metadata.
+
+Example:
 
 ```ahk
 class PowerPointProfile {
-	static Enabled := false
-	static Name := "PowerPoint"
-	static Applications := ["POWERPNT.EXE"]
-	static Plugins := Map(
-		"KeyPressOSD", true,
-		"PointerHalo", true,
-		"ClickRipples", true,
-		"DragIndicator", false
-	)
+    static Enabled := false
+    static Name := "PowerPoint"
+    static Applications := ["POWERPNT.EXE"]
+    static PluginStates := Map(
+        "KeyPressOSD", true,
+        "PointerHalo", true,
+        "ClickRipples", true,
+        "DragIndicator", true,
+        "MagnifierLens", false
+    )
 }
 ```
 
-An application-specific profile is enabled when `Enabled` is omitted; add `static Enabled := false` to disable it. This makes commenting out that line a convenient way to enable an example profile. All registered plugins are available to every profile; each `Plugins` value is the default active state for that profile. Plugin names omitted from an application-specific profile inherit the corresponding setting from the Default profile. Simple `Applications` entries are executable-name strings matched case-insensitively. A class-specific entry can instead use `Map("Process", "...", "Class", "...")`; it takes precedence over a process-only mapping for the same executable. Duplicate process-only mappings and duplicate process/class mappings are rejected during startup.
+An application-specific profile is enabled when `Enabled` is omitted; add `static Enabled := false` to disable it. Plugin names omitted from an application profile's `PluginStates` inherit the corresponding state from the Default profile. State values must be simple `true`/`false` values.
+
+Simple `Applications` entries are executable-name strings matched case-insensitively. A class-specific entry can instead use `Map("Process", "...", "Class", "...")`; it takes precedence over a process-only mapping for the same executable. Duplicate process-only mappings and duplicate process/class mappings are rejected during startup.
 
 For example, a Desktop-only profile can distinguish Windows Desktop windows from ordinary File Explorer windows even though both use `explorer.exe`:
 
 ```ahk
 class DesktopProfile {
-	; static Enabled := false
-	static Name := "Desktop"
-	static Applications := [
-		Map("Process", "explorer.exe", "Class", "Progman"),
-		Map("Process", "explorer.exe", "Class", "WorkerW")
-	]
-	static Plugins := Map(
-		"KeyPressOSD", false,
-		"PointerHalo", false,
-		"ClickRipples", false,
-		"DragIndicator", false
-	)
+    ; static Enabled := false
+    static Name := "Desktop"
+    static Applications := [
+        Map("Process", "explorer.exe", "Class", "Progman"),
+        Map("Process", "explorer.exe", "Class", "WorkerW")
+    ]
+    static PluginStates := Map(
+        "KeyPressOSD", false,
+        "PointerHalo", false,
+        "ClickRipples", false,
+        "DragIndicator", false,
+        "MagnifierLens", false
+    )
 }
 
 SmartProfileManager.Register(DesktopProfile)
 ```
 
-With no separate process-only `explorer.exe` profile, ordinary File Explorer windows continue to use the `Default` profile. All registered plugins are available to every profile; the `Plugins` values define their default runtime state. In this Desktop example all plugins therefore start disabled.
+With no separate process-only `explorer.exe` profile, ordinary File Explorer windows continue to use the Default profile. In this Desktop example every plugin is explicitly set to `false`.
 
 Useful `explorer.exe` window classes for profile matching:
 
@@ -281,40 +365,39 @@ Useful `explorer.exe` window classes for profile matching:
 
 Taskbar classes are normally handled by SmartInputVisuals' built-in tray/taskbar exclusion rather than by application profiles.
 
-`Default.ahk` is authoritative and fail-closed: every registered plugin must have an explicit default state there. Application-specific profiles may use only plugin names known to the Default profile, so misspelled or obsolete names are reported at startup instead of being silently ignored. Entries for optional plugin files may remain in the Default profile even when those files are not installed.
+### Per-profile plugin toggles
 
-### Per-profile DragIndicator toggle
+The tray menu builds one session-only runtime toggle for every registered plugin. Optional plugin files that are absent are not listed. Items appear in plugin registration order. Plugin registration supplies the stable internal name; the matching `PluginDefinition` supplies the user-facing display name.
 
-`DragIndicator` has a session-only runtime toggle in the tray menu. The toggle is stored separately for each application profile. Its initial checked state comes directly from that profile's `Plugins` value (or the inherited Default value), and a tray change overrides that default only for the current session.
+- Each toggle targets the profile of the foreground application/window context. Entering the taskbar, notification area or tray popup preserves the previously captured target instead of switching to a shell profile. Desktop and File Explorer windows resolve normally.
+- A check mark shows the plugin's effective state for the target profile. A profile value of `false` means initially unchecked, not unavailable, so the item remains enabled and can be switched on for the current session.
+- A plugin that becomes unhealthy after a callback error remains listed but is unchecked and disabled. While SmartInputVisuals is globally paused, all plugin toggles are disabled but retain their checked states.
+- An accepted toggle briefly shows `<DisplayName>: ON` or `<DisplayName>: OFF` near the pointer.
+- Runtime toggle states are stored separately for each profile, kept only for the current SmartInputVisuals session and reset when the script restarts.
 
-- Right-click the SmartInputVisuals tray icon and use `DragIndicator`.
-- The toggle targets the profile of the foreground application/window context. Entering the taskbar, notification area or tray popup preserves the previously captured target instead of switching the toggle to a shell profile. Desktop and File Explorer windows resolve normally.
-- When the `DragIndicator` plugin is installed, the menu item is enabled and its check mark shows the effective state for the target profile.
-- A profile value of `false` means initially unchecked, not unavailable; the tray toggle can enable it for the current session.
-- An accepted toggle briefly shows `DragIndicator: ON` or `DragIndicator: OFF` near the pointer.
-- Runtime toggle states are kept only for the current SmartInputVisuals session and reset when the script restarts.
+The included definitions explicitly repeat each internal plugin name as its `DisplayName` for clarity. Change the `PluginDefinition("...")` value when a friendlier tray caption is required; passing an empty string still falls back to the `PluginDefinitions` Map key.
 
 ### Global enable toggle
 
 The tray menu also provides `Enabled` as the global master switch, independent of application profiles. Unchecking it immediately clears active visualisations, stops the shared 20 ms host timer and stops keyboard-activity tracking. The tray menu remains available so SmartInputVisuals can be re-enabled. When re-enabled, physical mouse-button state is resynchronised before polling restarts to avoid artificial button transitions.
 
-The `Enabled` item is checked while SmartInputVisuals is active and unchecked while it is paused. Startup behaviour is configurable in `Core/TrayController.ahk` with `static ActiveByDefault := true`; set it to `false` to start paused/unchecked. Plugin toggles appear before the global switch. While globally paused, plugin toggles are disabled but keep their checked states, and the tray icon tooltip shows `SmartInputVisuals (Paused)`. Re-enabling SmartInputVisuals restores the same per-profile plugin states.
+The `Enabled` item is checked while SmartInputVisuals is active and unchecked while it is paused. Startup behaviour is configurable in `Core/TrayController.ahk` with `static ActiveByDefault := true`; set it to `false` to start paused/unchecked. Plugin toggles appear before the global switch. While globally paused, plugin toggles are disabled but keep their checked states, and the tray icon tooltip appends `(Paused)` to the configured `APP_NAME`. Re-enabling SmartInputVisuals restores the same per-profile plugin states.
 
-The tray menu groups per-profile plugin toggles first, then the global `Enabled` master switch, followed by Exit. AutoHotkey's standard `Suspend Hotkeys` and `Pause Script` entries are intentionally removed in favour of these SmartInputVisuals-specific controls.
+The tray menu groups per-profile plugin toggles first, in plugin registration order, then the global `Enabled` master switch, followed by Exit. AutoHotkey's standard `Suspend Hotkeys` and `Pause Script` entries are intentionally removed in favour of these SmartInputVisuals-specific controls.
 
-When a profile default disables an already-visible plugin, the manager sends one `Deactivated("Profile", state)` callback so the plugin can clear its visualisation, then stops dispatching normal callbacks to it. If `DragIndicator` is switched off with the runtime toggle, it receives `Deactivated("RuntimeToggle", state)` and is likewise skipped until that profile's runtime toggle is enabled again.
+When the effective configured profile state disables an already-visible plugin, the manager sends one `Deactivated("Profile", state)` callback so the plugin can clear its visualisation, then stops dispatching normal callbacks to it. If any plugin is switched off with its runtime toggle, it receives `Deactivated("RuntimeToggle", state)` and is likewise skipped until that profile's runtime toggle is enabled again.
 
 ## Plugin eligibility and lifecycle
 
 The manager applies eligibility centrally in this order:
 
 1. taskbar/notification-area exclusion
-2. effective per-profile plugin state (profile default plus any session override)
+2. effective per-profile plugin state (`PluginStates` plus any session override)
 3. focus/hover application scope
 4. client-area display scope
 5. pause-while-typing policy
 
-All registered plugins are initialised at startup. Profiles define their default active state rather than plugin availability, and the current `DragIndicator` tray toggle can override its profile default for the session. If a plugin callback throws an error, only that plugin is marked unhealthy, shut down and removed from further dispatch; the other plugins continue running.
+All registered plugins are initialised at startup. `Default.PluginStates` supplies the baseline active state, application profiles may override it, and each registered plugin's tray toggle can override the effective profile state for the session. If a plugin callback throws an error, only that plugin is marked unhealthy, shut down and removed from further dispatch; the other plugins continue running and the failed plugin's tray item becomes disabled.
 
 For profile, runtime-toggle, scope or typing transitions, an active plugin may receive one `Deactivated(reason, state)` cleanup callback. Once blocked, it receives no `WantsTick`, `Tick`, `MouseDown` or `MouseUp` calls.
 
@@ -331,11 +414,13 @@ MouseUp(button, state)
 Shutdown()
 ```
 
-Register a plugin with:
+Register a plugin with its stable internal name:
 
 ```ahk
 PluginManager.Register(MyPlugin, "MyPlugin")
 ```
+
+The second argument is the stable internal name. `PluginManager` resolves the corresponding `PluginDefinition` from the Default profile and retains that definition with the runtime plugin record. Registration order determines the order of plugin items in the tray menu.
 
 ## Shared input state
 
@@ -370,7 +455,6 @@ SmartInputVisuals uses one 20 ms host timer. Pointer position and mouse-button s
 
 The architecture avoids unnecessary work by:
 
-- not initialising plugins which are unavailable in every enabled profile;
 - skipping plugins disabled by the active profile;
 - skipping plugins disabled by their per-profile runtime toggle;
 - skipping out-of-scope plugins;
@@ -383,7 +467,8 @@ The architecture avoids unnecessary work by:
 - using `SetWindowPos()` for unchanged moving visuals where possible;
 - redrawing `PointerHalo` only when its style/opacity changes;
 - ticking `ClickRipples` only while animations are active;
-- throttling `DragIndicator` rendering to roughly 30 FPS, ignoring sub-2-pixel movement and releasing completed-drag surfaces after the shared fade.
+- throttling `DragIndicator` rendering to roughly 30 FPS, ignoring sub-2-pixel movement and releasing completed-drag surfaces after the shared fade;
+- throttling `MagnifierLens` refreshes independently of the 20 ms host tick and refreshing its overlay-exclusion filter only when registered overlay windows change.
 
 ## GDI+ lifetime
 

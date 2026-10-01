@@ -2,7 +2,6 @@
 ; Creates expanding concentric rings at each mouse-button press.
 
 class ClickRipplesPlugin {
-
 	static Lifetime := 650
 	static MaxRadius := 52
 	static MinRadius := 7
@@ -98,6 +97,7 @@ class ClickRippleEffect {
 
 		this.CreateSurface()
 		this.CreatePen()
+		SmartOverlayRegistry.Register(this.Gui.Hwnd)
 	}
 
 	CreateSurface() {
@@ -319,6 +319,7 @@ class ClickRippleEffect {
 		}
 
 		if this.Gui {
+			SmartOverlayRegistry.Unregister(this.Gui.Hwnd)
 			this.Gui.Destroy()
 			this.Gui := 0
 		}

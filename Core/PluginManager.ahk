@@ -1,6 +1,6 @@
 ; SmartInputVisuals - same-process plugin manager
 ;
-; Optional plugin configuration overrides:
+; Optional plugin metadata/configuration:
 ;     static ScopeMode := "HoverOnly"       ; absent = inherit SmartAppScope.DefaultMode
 ;     static AllowWhileTyping := true       ; absent = pause while typing
 ;     static AllowOutsideClientArea := true ; absent = require client/content area
@@ -24,6 +24,19 @@ class PluginManager {
 	static PreviousRightM := false
 
 	static Register(plugin, name) {
+		name := Trim(name)
+
+		if name = ""
+			throw Error("SmartInputVisuals plugin names must not be empty.")
+
+		definition := SmartProfileManager.GetPluginDefinition(name)
+		if !definition {
+			throw Error(
+				"No Default-profile PluginDefinition exists for plugin '"
+				name "'."
+			)
+		}
+
 		for record in this.Plugins {
 			if StrLower(record.Name) = StrLower(name)
 				throw Error("Duplicate SmartInputVisuals plugin name '" name "'.")
@@ -31,6 +44,7 @@ class PluginManager {
 
 		this.Plugins.Push({
 			Plugin: plugin,
+			Definition: definition,
 			Name: name,
 			Healthy: true,
 			Initialised: false,
@@ -43,6 +57,31 @@ class PluginManager {
 		for record in this.Plugins
 			names.Push(record.Name)
 		return names
+	}
+
+	static GetRegisteredPluginInfo() {
+		plugins := []
+		for record in this.Plugins {
+			plugins.Push({
+				Name: record.Name,
+				DisplayName: SmartProfileManager.GetPluginDisplayName(record.Name)
+			})
+		}
+		return plugins
+	}
+
+	static IsPluginHealthy(pluginName) {
+		record := this.FindRecord(pluginName)
+		return !!(record && record.Healthy)
+	}
+
+	static FindRecord(pluginName) {
+		pluginName := StrLower(Trim(pluginName))
+		for record in this.Plugins {
+			if StrLower(record.Name) = pluginName
+				return record
+		}
+		return 0
 	}
 
 	static Init() {

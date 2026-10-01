@@ -10,7 +10,9 @@
 #Include Core\DpiContext.ahk
 #Include Core\InputActivity.ahk
 #Include Core\InputState.ahk
+#Include Core\OverlayRegistry.ahk
 #Include Core\AppScope.ahk
+#Include Core\PluginDefinition.ahk
 #Include Core\ProfileManager.ahk
 #Include Core\DisplayScope.ahk
 #Include Core\TrayController.ahk
@@ -25,19 +27,24 @@
 #Include "*i Plugins\PointerHalo.ahk"
 #Include "*i Plugins\ClickRipples.ahk"
 #Include "*i Plugins\DragIndicator.ahk"
+#Include "*i Plugins\MagnifierLens.ahk"
+
+; Pausing stops the host timer and InputHook, so keep the tray host alive explicitly.
+Persistent(true)
 
 InstallKeybdHook()
 InstallMouseHook()
 CoordMode("Mouse", "Screen")
 CoordMode("ToolTip", "Screen")
 
+APP_NAME := "SmartInputVisuals"
 APP_POLL_INTERVAL := 20
 ApplicationPaused := false
 AppState := SmartInputState()
 
 SmartAppScope.Init()
 SmartProfileManager.Init(PluginManager.GetRegisteredPluginNames())
-SmartTrayController.Init(SetApplicationPaused)
+SmartTrayController.Init(APP_NAME, SetApplicationPaused)
 ApplicationPaused := SmartTrayController.Paused
 if !ApplicationPaused
 	SmartInputActivity.Init()

@@ -9,9 +9,10 @@
 ; names and window classes are matched case-insensitively. A class-specific match
 ; takes precedence over a process-only match for the same executable.
 ;
-; Plugin names must match an entry in Default.ahk. All registered plugins are available
-; to every profile. The true/false values in Plugins define each profile's default runtime
-; state. A profile may omit plugin names; omitted settings inherit the Default profile value.
+; Plugin metadata and baseline states are defined in Default.ahk. Every profile uses
+; the same PluginStates structure: Default contains a complete baseline Map, while
+; application profiles may contain only the true/false states they want to override.
+; Omitted plugin names inherit the corresponding state from Default.
 ;
 ; Keep application-specific configuration here rather than in the plugins so
 ; visual plugins remain reusable and profile selection stays centralised.
@@ -22,7 +23,7 @@
 ; different windows share one process, such as the Desktop and File Explorer.
 ;
 ; The Desktop example below is enabled by leaving its Enabled setting commented out;
-; uncomment the line to disable it. All Desktop plugin defaults are off. The PowerPoint
+; uncomment the line to disable it. All Desktop plugin overrides are off. The PowerPoint
 ; and Excel/Word examples are disabled by default.
 ; Copy, rename or adapt these examples as required.
 
@@ -33,11 +34,12 @@ class DesktopProfile {
 		Map("Process", "explorer.exe", "Class", "Progman"),
 		Map("Process", "explorer.exe", "Class", "WorkerW")
 	]
-	static Plugins := Map(
+	static PluginStates := Map(
 		"KeyPressOSD", false,
 		"PointerHalo", false,
 		"ClickRipples", false,
-		"DragIndicator", false
+		"DragIndicator", false,
+		"MagnifierLens", false
 	)
 }
 
@@ -45,11 +47,12 @@ class PowerPointProfile {
 	static Enabled := false
 	static Name := "PowerPoint"
 	static Applications := ["powerpnt.exe"]
-	static Plugins := Map(
+	static PluginStates := Map(
 		"KeyPressOSD", true,
 		"PointerHalo", true,
 		"ClickRipples", true,
-		"DragIndicator", true
+		"DragIndicator", true,
+		"MagnifierLens", false
 	)
 }
 
@@ -57,11 +60,12 @@ class ExcelAndWordProfile {
 	static Enabled := false
 	static Name := "Excel and Word"
 	static Applications := ["excel.exe", "winword.exe"]
-	static Plugins := Map(
+	static PluginStates := Map(
 		"KeyPressOSD", true,
 		"PointerHalo", true,
 		"ClickRipples", true,
-		"DragIndicator", false
+		"DragIndicator", false,
+		"MagnifierLens", false
 	)
 }
 

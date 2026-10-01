@@ -1,5 +1,9 @@
 ; SmartInputVisuals - application-specific plugin profiles
-; Profiles select default plugin states according to the focused and/or hovered window context.
+; Profiles select plugin states according to the focused and/or hovered window context.
+;
+; The Default profile owns canonical PluginDefinition objects and the complete
+; baseline PluginStates Map. Application profiles use the same PluginStates shape
+; for optional true/false overrides and cannot redefine plugin metadata.
 
 class SmartProfileManager {
 	static SelectionMode := "HoverThenFocus"
@@ -20,6 +24,32 @@ class SmartProfileManager {
 				throw Error("Only one SmartInputVisuals default profile may be registered.")
 			this.DefaultProfile := profile
 		}
+	}
+
+	static GetPluginDefinition(pluginName) {
+		if !this.DefaultProfile
+			return 0
+
+		definitions := 0
+		try definitions := this.DefaultProfile.PluginDefinitions
+		catch
+			return 0
+
+		if Type(definitions) != "Map"
+			return 0
+
+		if definitions.Has(pluginName)
+			return definitions[pluginName]
+
+		; Plugin names are intended to be stable and exact, but resolve
+		; case-insensitively here so registration and lookup remain robust.
+		key := StrLower(Trim(pluginName))
+		for definitionName, definition in definitions {
+			if StrLower(Trim(definitionName)) = key
+				return definition
+		}
+
+		return 0
 	}
 
 	static Init(registeredPluginNames) {
@@ -143,25 +173,21 @@ class SmartProfileManager {
 		if runtimeMap && runtimeMap.Has(pluginName)
 			return !!runtimeMap[pluginName]
 
-		return this.GetPluginDefaultStateForProfile(profile, pluginName)
+		return this.GetConfiguredPluginStateForProfile(profile, pluginName)
 	}
 
-	static GetPluginDefaultStateForProfile(profile, pluginName) {
+	static GetConfiguredPluginStateForProfile(profile, pluginName) {
 		if !profile
 			return false
 
-		enabled := false
-		if this.ProfileHasPluginSetting(profile, pluginName, &enabled)
-			return enabled
-
-		if this.DefaultProfile && profile != this.DefaultProfile {
-			if this.ProfileHasPluginSetting(this.DefaultProfile, pluginName, &enabled)
+		if profile != this.DefaultProfile {
+			enabled := false
+			if this.ProfileHasPluginState(profile, pluginName, &enabled)
 				return enabled
 		}
 
-		; Missing settings fail closed. Init() also requires every registered
-		; plugin to have an explicit entry in the Default profile.
-		return false
+		defaultStates := this.GetPluginStates(this.DefaultProfile, true)
+		return defaultStates.Has(pluginName) ? !!defaultStates[pluginName] : false
 	}
 
 	static HasRuntimePluginState(pluginName) {
@@ -220,70 +246,140 @@ class SmartProfileManager {
 		return this.GetProfileForWindow(processName, className) = this.ActiveProfile
 	}
 
-	static ProfileHasPluginSetting(profile, pluginName, &enabled) {
-		plugins := 0
-		try plugins := profile.Plugins
+	static ProfileHasPluginState(profile, pluginName, &enabled) {
+		states := 0
+		try states := profile.PluginStates
 		catch
 			return false
 
-		if !plugins.Has(pluginName)
+		if !states.Has(pluginName)
 			return false
 
-		enabled := !!plugins[pluginName]
+		enabled := !!states[pluginName]
 		return true
+	}
+
+	static GetPluginDisplayName(pluginName) {
+		definition := this.GetPluginDefinition(pluginName)
+		return definition && definition.DisplayName != "" ? definition.DisplayName : Trim(pluginName)
 	}
 
 	static ValidatePluginConfiguration(registeredPluginNames) {
 		if !this.DefaultProfile
 			throw Error("SmartInputVisuals requires one Default profile.")
 
-		defaultPlugins := this.GetPluginSettings(this.DefaultProfile, true)
+		definitions := this.GetPluginDefinitions(true)
+		displayNames := Map()
+
+		for pluginName, definition in definitions {
+			if Trim(pluginName) = ""
+				throw Error("PluginDefinitions Map keys must not be empty.")
+
+			if Type(definition) != "PluginDefinition" {
+				throw Error(
+					"Plugin '" pluginName "' in the Default profile must be a "
+					"PluginDefinition."
+				)
+			}
+
+
+			effectiveDisplayName := definition.DisplayName != "" ? definition.DisplayName : pluginName
+			displayKey := StrLower(effectiveDisplayName)
+			if displayNames.Has(displayKey) {
+				throw Error(
+					"Duplicate SmartInputVisuals plugin display name '"
+					effectiveDisplayName "'."
+				)
+			}
+			displayNames[displayKey] := pluginName
+		}
 
 		for pluginName in registeredPluginNames {
-			if !defaultPlugins.Has(pluginName) {
+			if !definitions.Has(pluginName) {
 				throw Error(
-					"Default profile has no setting for registered plugin '"
+					"Default profile has no definition for registered plugin '"
 					pluginName "'."
 				)
 			}
 		}
 
-		; The Default profile is the canonical plugin-name list. Application
-		; profiles may omit entries to inherit defaults, but may not introduce
-		; unknown names. Default entries for an optional plugin are harmless when
-		; that plugin file is absent.
-		for profile in this.Profiles {
-			if profile = this.DefaultProfile
-				continue
+		; Default.PluginStates is the complete baseline. Application profiles use
+		; the same structure but may omit plugins to inherit that baseline.
+		defaultStates := this.GetPluginStates(this.DefaultProfile, true)
 
-			plugins := this.GetPluginSettings(profile, false)
-			for pluginName, unused in plugins {
-				if !defaultPlugins.Has(pluginName) {
+		for pluginName in definitions {
+			if !defaultStates.Has(pluginName) {
+				throw Error(
+					"Default profile PluginStates has no state for plugin '"
+					pluginName "'."
+				)
+			}
+		}
+
+		for pluginName in defaultStates {
+			if !definitions.Has(pluginName) {
+				throw Error(
+					"Unknown plugin '" pluginName "' in Default PluginStates."
+				)
+			}
+		}
+
+		for profile in this.Profiles {
+			states := this.GetPluginStates(profile, profile = this.DefaultProfile)
+			for pluginName, setting in states {
+				if !definitions.Has(pluginName) {
 					throw Error(
 						"Unknown plugin '" pluginName "' in profile '"
 						this.GetProfileName(profile) "'."
+					)
+				}
+
+				if Type(setting) != "Integer" || (setting != 0 && setting != 1) {
+					throw Error(
+						"Plugin state '" pluginName "' in profile '"
+						this.GetProfileName(profile) "' must be true or false."
 					)
 				}
 			}
 		}
 	}
 
-	static GetPluginSettings(profile, required) {
-		plugins := 0
-		try plugins := profile.Plugins
+	static GetPluginDefinitions(required := false) {
+		definitions := 0
+		try definitions := this.DefaultProfile.PluginDefinitions
 		catch {
 			if required
-				throw Error("Default profile must define a Plugins map.")
+				throw Error("Default profile must define a PluginDefinitions map.")
 			return Map()
 		}
 
-		if Type(plugins) != "Map" {
+		if Type(definitions) != "Map"
+			throw Error("Default profile must define PluginDefinitions as a Map.")
+
+		return definitions
+	}
+
+	static GetPluginStates(profile, required := false) {
+		states := 0
+		try states := profile.PluginStates
+		catch {
+			if required {
+				throw Error(
+					"Profile '" this.GetProfileName(profile)
+					"' must define a PluginStates Map."
+				)
+			}
+			return Map()
+		}
+
+		if Type(states) != "Map" {
 			throw Error(
-				"Profile '" this.GetProfileName(profile) "' must define Plugins as a Map."
+				"Profile '" this.GetProfileName(profile)
+				"' must define PluginStates as a Map."
 			)
 		}
 
-		return plugins
+		return states
 	}
 
 	static GetApplicationMatchers(profile) {
