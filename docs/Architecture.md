@@ -28,7 +28,9 @@ The manager applies eligibility centrally in this order:
 
 Only registered plugins that are present in the `PluginDefinitions` whitelist are initialised at startup. A missing Default `PluginStates` entry means OFF, application profiles may override the Default state, and each available plugin's tray or toolbar toggle can override the effective profile state for the session. Registered but non-whitelisted plugins remain unavailable without an error. If a plugin callback throws an error, only that plugin is marked unhealthy, shut down and removed from further dispatch; the other plugins continue running, the failed plugin disappears from the toolbar, and its tray item becomes disabled.
 
-For profile, runtime-toggle, scope or typing transitions, an active plugin may receive one `Deactivated(reason, state)` cleanup callback. Once blocked, it receives no `WantsTick`, `Tick`, `MouseDown` or `MouseUp` calls.
+For profile, runtime-toggle, scope or typing transitions, an active plugin may receive one `Deactivated(reason, state)` cleanup callback. A plugin that implements `KeepActiveWhenBlocked(reason, state)` may retain an already active interaction while a newly detected eligibility block exists. If that callback returns `true`, normal dispatch continues for that interaction; otherwise the plugin is deactivated and receives no `WantsTick`, `Tick`, `MouseDown` or `MouseUp` calls while blocked. Runtime errors cannot be bypassed by continuation handling.
+
+`DragIndicator` uses this continuation mechanism after its drag visual becomes active. It latches the effective profile/plugin state and the monitor containing the drag start point, then remains active until the drag ends even if the pointer leaves the originating application, client area or profile scope. Its visible endpoint remains confined to the latched start monitor.
 
 Optional plugin callbacks are:
 
@@ -40,6 +42,7 @@ WantsTick(state)
 Tick(state)
 MouseDown(button, state)
 MouseUp(button, state)
+KeepActiveWhenBlocked(reason, state)
 Shutdown()
 ```
 

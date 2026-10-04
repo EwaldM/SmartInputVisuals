@@ -13,6 +13,7 @@
 ;     Tick(state)
 ;     MouseDown(button, state)
 ;     MouseUp(button, state)
+;     KeepActiveWhenBlocked(reason, state) -> true/false
 ;     Shutdown()
 
 class PluginManager {
@@ -137,9 +138,24 @@ class PluginManager {
 
 			blockReason := this.GetBlockReason(record, state)
 			if blockReason != "" {
-				if record.Active
-					this.Deactivate(record, blockReason, state)
-				continue
+				keepActive := false
+
+				; Some interactions deliberately latch their eligibility once they have
+				; started. Give an already-active plugin a chance to continue before
+				; applying a newly detected profile/scope block.
+				if record.Active && record.Healthy && HasMethod(record.Plugin, "KeepActiveWhenBlocked") {
+					try keepActive := !!record.Plugin.KeepActiveWhenBlocked(blockReason, state)
+					catch Error as err {
+						this.DisableAfterError(record, "KeepActiveWhenBlocked", err)
+						continue
+					}
+				}
+
+				if !keepActive {
+					if record.Active
+						this.Deactivate(record, blockReason, state)
+					continue
+				}
 			}
 
 			if !record.Active {

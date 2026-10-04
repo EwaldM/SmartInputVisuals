@@ -73,7 +73,7 @@ static MaxActiveRipples := 6
 
 ## DragIndicator
 
-`Plugins/DragIndicator.ahk` displays a straight dashed line from the drag start point to the current pointer position. A solid arrowhead marks the current position, and the entire indicator uses the colour of the mouse button which started the drag.
+`Plugins/DragIndicator.ahk` displays a straight dashed line from the drag start point to a visible endpoint on the start monitor. While the pointer is on that monitor, the endpoint follows the current pointer position. A solid arrowhead marks the endpoint, and the entire indicator uses the colour of the mouse button which started the drag.
 
 ```ahk
 static DragThreshold := 20
@@ -82,9 +82,14 @@ static ArrowLength := 15.0
 static ArrowHalfWidth := 7.0
 static UpdateInterval := 33
 static MinMovement := 2
+static ScreenEdgeMargin := 10
 ```
 
-The indicator does not appear until the pointer has moved at least `DragThreshold` pixels, so ordinary clicks do not flash a line. Rendering is limited to roughly 30 FPS and movements below `MinMovement` pixels are ignored between rendered frames. After the drag ends, the final arrow line remains fully visible for `SmartInputVisualsTheme.IdleDelay`, then fades over `SmartInputVisualsTheme.FadeDuration`. If another drag starts drawing before that idle period finishes, the previous indicator starts fading immediately while the new drag is drawn at full opacity.
+The indicator does not appear until the pointer has moved at least `DragThreshold` pixels, so ordinary clicks do not flash a line. The normal profile, application-scope and client-area eligibility rules apply until the drag visual becomes active. At that point, DragIndicator latches the effective profile/plugin state and the physical monitor containing the drag start point for the duration of the drag. Profile or scope transitions during the drag therefore do not interrupt an active drag indicator.
+
+While the pointer remains on the latched start monitor, the arrowhead follows the real pointer position. If the pointer leaves that monitor, only the endpoint is clamped to the corresponding monitor edge, using `ScreenEdgeMargin` to keep the arrowhead visible. When the pointer returns to the start monitor, the endpoint immediately resumes following the real pointer position. The latched drag context is cleared when the drag ends or the plugin is reset.
+
+Rendering is limited to roughly 30 FPS and movements below `MinMovement` pixels are ignored between rendered frames. After the drag ends, the final arrow line remains fully visible for `SmartInputVisualsTheme.IdleDelay`, then fades over `SmartInputVisualsTheme.FadeDuration`. If another drag starts drawing before that idle period finishes, the previous indicator starts fading immediately while the new drag is drawn at full opacity.
 
 DragIndicator normally uses one layered backing DIB. During the brief overlap between a fading completed drag and a newly drawn drag, a second temporary DIB retains the previous indicator independently; it is released as soon as the shared fade finishes. Surfaces otherwise remain short-lived, and a very long diagonal drag can still require a temporarily large backing surface because the bitmap must cover the line's bounding rectangle.
 

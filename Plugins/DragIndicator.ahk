@@ -9,6 +9,7 @@ class DragIndicatorPlugin {
 	static UpdateInterval := 33
 	static MinMovement := 2
 	static SurfaceQuantum := 32
+	static ScreenEdgeMargin := 10
 
 	static Gui := 0
 	static Hdc := 0
@@ -39,6 +40,12 @@ class DragIndicatorPlugin {
 	static LastEndY := -2147483648
 	static LastRenderTick := 0
 	static DragVisualStarted := false
+	static LatchedProfile := 0
+	static LatchedPluginEnabled := false
+	static StartMonitorLeft := 0
+	static StartMonitorTop := 0
+	static StartMonitorRight := 0
+	static StartMonitorBottom := 0
 	static Holding := false
 	static HoldStartTick := 0
 	static Opacity := 255
@@ -66,6 +73,16 @@ class DragIndicatorPlugin {
 
 	static Deactivated(reason, state) {
 		this.Reset()
+	}
+
+	static KeepActiveWhenBlocked(reason, state) {
+		; Eligibility is latched only after the drag visual has actually started.
+		; Before that, the normal profile, application and client-area rules remain
+		; unchanged. Runtime errors are never suppressed.
+		return reason != "Error"
+			&& this.DragVisualStarted
+			&& this.ActiveButton != ""
+			&& this.LatchedPluginEnabled
 	}
 
 	static MouseDown(button, state) {
@@ -117,6 +134,7 @@ class DragIndicatorPlugin {
 					this.DestroySurface()
 				}
 				this.DragVisualStarted := false
+				this.ClearLatchedDragContext()
 			}
 			return
 		}
@@ -128,13 +146,96 @@ class DragIndicatorPlugin {
 		if !this.DragVisualStarted {
 			if this.Holding && this.Visible
 				this.StartRetiredFade()
+
+			this.LatchDragContext()
 			this.DragVisualStarted := true
 		}
 
 		this.LastEndX := state.X
 		this.LastEndY := state.Y
 		this.LastRenderTick := now
-		this.Render(this.StartX, this.StartY, state.X, state.Y, this.ActiveButton, distance)
+
+		endPoint := this.ClampEndPointToStartMonitor(state.X, state.Y)
+		renderDx := endPoint.X - this.StartX
+		renderDy := endPoint.Y - this.StartY
+		renderDistance := Sqrt(renderDx * renderDx + renderDy * renderDy)
+		if renderDistance > 0 {
+			this.Render(
+				this.StartX,
+				this.StartY,
+				endPoint.X,
+				endPoint.Y,
+				this.ActiveButton,
+				renderDistance
+			)
+		} else if this.Visible {
+			this.Hide()
+		}
+	}
+
+	static LatchDragContext() {
+		this.LatchedProfile := SmartProfileManager.ActiveProfile
+		this.LatchedPluginEnabled := SmartProfileManager.IsPluginEnabled("DragIndicator")
+
+		monitor := this.GetMonitorBoundsAtPoint(this.StartX, this.StartY)
+		this.StartMonitorLeft := monitor.Left
+		this.StartMonitorTop := monitor.Top
+		this.StartMonitorRight := monitor.Right
+		this.StartMonitorBottom := monitor.Bottom
+	}
+
+	static GetMonitorBoundsAtPoint(x, y) {
+		packedPoint := (x & 0xFFFFFFFF) | ((y & 0xFFFFFFFF) << 32)
+		; MONITOR_DEFAULTTONEAREST = 2.
+		hMonitor := DllCall(
+			"user32\MonitorFromPoint",
+			"Int64", packedPoint,
+			"UInt", 2,
+			"Ptr"
+		)
+		if !hMonitor
+			throw OSError()
+
+		monitorInfo := Buffer(40, 0)
+		NumPut("UInt", 40, monitorInfo, 0)
+		if !DllCall(
+			"user32\GetMonitorInfoW",
+			"Ptr", hMonitor,
+			"Ptr", monitorInfo.Ptr,
+			"Int"
+		)
+			throw OSError()
+
+		return {
+			Left: NumGet(monitorInfo, 4, "Int"),
+			Top: NumGet(monitorInfo, 8, "Int"),
+			Right: NumGet(monitorInfo, 12, "Int"),
+			Bottom: NumGet(monitorInfo, 16, "Int")
+		}
+	}
+
+	static ClampEndPointToStartMonitor(x, y) {
+		; While the pointer is on the start monitor, use its real coordinates,
+		; including points close to an edge. Only an axis which has actually left
+		; the monitor is clamped to an inset boundary.
+		left := Min(this.StartX, this.StartMonitorLeft + this.ScreenEdgeMargin)
+		top := Min(this.StartY, this.StartMonitorTop + this.ScreenEdgeMargin)
+		right := Max(this.StartX, this.StartMonitorRight - 1 - this.ScreenEdgeMargin)
+		bottom := Max(this.StartY, this.StartMonitorBottom - 1 - this.ScreenEdgeMargin)
+
+		endX := x
+		if x < this.StartMonitorLeft
+			endX := left
+		else if x >= this.StartMonitorRight
+			endX := right
+
+		endY := y
+		if y < this.StartMonitorTop
+			endY := top
+		else if y >= this.StartMonitorBottom
+			endY := bottom
+
+		return {X: endX, Y: endY}
 	}
 
 	static CreatePens() {
@@ -373,6 +474,16 @@ class DragIndicatorPlugin {
 		}
 
 		this.DragVisualStarted := false
+		this.ClearLatchedDragContext()
+	}
+
+	static ClearLatchedDragContext() {
+		this.LatchedProfile := 0
+		this.LatchedPluginEnabled := false
+		this.StartMonitorLeft := 0
+		this.StartMonitorTop := 0
+		this.StartMonitorRight := 0
+		this.StartMonitorBottom := 0
 	}
 
 	static TickHold() {
@@ -571,6 +682,7 @@ class DragIndicatorPlugin {
 		this.ResetRetired()
 		this.ActiveButton := ""
 		this.DragVisualStarted := false
+		this.ClearLatchedDragContext()
 		this.Holding := false
 		this.HoldStartTick := 0
 		this.Opacity := 255
