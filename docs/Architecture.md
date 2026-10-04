@@ -15,6 +15,8 @@ Capture behaviour can vary: Teams and Zoom may use different capture backends de
 
 `Core/DpiContext.ahk` temporarily switches visual-plugin initialisation and each complete host tick to per-monitor DPI awareness. Pointer sampling, application/window geometry, display-scope checks, layered-window creation and plugin positioning therefore use one consistent physical-pixel coordinate space, including on mixed-DPI multi-monitor setups and monitors with negative screen coordinates. The previous thread DPI context is restored immediately afterwards, so SmartInputVisuals does not globally change AutoHotkey's DPI behaviour or the tray menu. On Windows versions where the thread DPI API is unavailable, the helper safely falls back to the normal AutoHotkey DPI context.
 
+`Core/MonitorGeometry.ahk` resolves the physical monitor bounds for a screen point with `MonitorFromPoint` and `GetMonitorInfoW`. `DragIndicator` uses those bounds to latch the monitor containing the drag start point, while `MagnifierLens` latches the monitor containing the pointer when the lens becomes active. Each plugin keeps its own monitor-specific clamping behaviour on top of the shared geometry lookup.
+
 ## Plugin eligibility and lifecycle
 
 The manager applies eligibility centrally in this order:
@@ -31,6 +33,8 @@ Only registered plugins that are present in the `PluginDefinitions` whitelist ar
 For profile, runtime-toggle, scope or typing transitions, an active plugin may receive one `Deactivated(reason, state)` cleanup callback. A plugin that implements `KeepActiveWhenBlocked(reason, state)` may retain an already active interaction while a newly detected eligibility block exists. If that callback returns `true`, normal dispatch continues for that interaction; otherwise the plugin is deactivated and receives no `WantsTick`, `Tick`, `MouseDown` or `MouseUp` calls while blocked. Runtime errors cannot be bypassed by continuation handling.
 
 `DragIndicator` uses this continuation mechanism after its drag visual becomes active. It latches the effective profile/plugin state and the monitor containing the drag start point, then remains active until the drag ends even if the pointer leaves the originating application, client area or profile scope. Its visible endpoint remains confined to the latched start monitor.
+
+`MagnifierLens` uses the same continuation callback only for the `TraySurface` block reason. Once the lens is active, hovering the Windows taskbar or notification area on the monitor latched at activation does not deactivate it. Taskbar surfaces outside that monitor and all other eligibility block reasons use the normal lifecycle.
 
 Optional plugin callbacks are:
 

@@ -8,6 +8,7 @@
 #Include Core\SharedTheme.ahk
 #Include Core\GDIPlusHost.ahk
 #Include Core\DpiContext.ahk
+#Include Core\MonitorGeometry.ahk
 #Include Core\InputActivity.ahk
 #Include Core\InputState.ahk
 #Include Core\OverlayRegistry.ahk

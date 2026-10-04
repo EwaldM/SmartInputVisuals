@@ -7,6 +7,8 @@ class MagnifierLensPlugin {
 	static Magnification := 2.0
 	static LensWidth := 400
 	static LensHeight := 600
+	static BorderWidth := 1
+	static BorderColor := 0xFFFFFF
 	static PointerPositionX := 0.25
 	static PointerPositionY := 0.15
 	static FollowStartDistance := 20
@@ -24,6 +26,7 @@ class MagnifierLensPlugin {
 	static LastHostY := -2147483648
 	static FollowXDirection := 0
 	static FollowYDirection := 0
+	static MonitorBounds := 0
 
 	static Init() {
 		this.ValidateConfiguration()
@@ -31,11 +34,25 @@ class MagnifierLensPlugin {
 
 	static Activated(state) {
 		this.EnsureReady()
+		this.MonitorBounds := SmartMonitorGeometry.GetBoundsAtPoint(state.X, state.Y)
 		this.LastRefreshTick := 0
 	}
 
 	static Deactivated(reason, state) {
 		this.Hide()
+	}
+
+	static KeepActiveWhenBlocked(reason, state) {
+		; Keep an already active lens visible while the pointer is over the
+		; Windows taskbar/notification area on the monitor latched at activation.
+		; All other eligibility blocks use the normal plugin lifecycle.
+		if reason != "TraySurface" || !this.MonitorBounds
+			return false
+
+		return state.X >= this.MonitorBounds.Left
+			&& state.X < this.MonitorBounds.Right
+			&& state.Y >= this.MonitorBounds.Top
+			&& state.Y < this.MonitorBounds.Bottom
 	}
 
 	static WantsTick(state) {
@@ -99,6 +116,10 @@ class MagnifierLensPlugin {
 			throw Error("MagnifierLens Magnification must be at least 1.0.")
 		if this.LensWidth < 1 || this.LensHeight < 1
 			throw Error("MagnifierLens LensWidth and LensHeight must be positive.")
+		if Type(this.BorderWidth) != "Integer" || this.BorderWidth < 0
+			throw Error("MagnifierLens BorderWidth must be a non-negative integer.")
+		if Type(this.BorderColor) != "Integer" || this.BorderColor < 0 || this.BorderColor > 0xFFFFFF
+			throw Error("MagnifierLens BorderColor must be an RGB value from 0x000000 to 0xFFFFFF.")
 		if this.PointerPositionX < 0 || this.PointerPositionX > 1
 			throw Error("MagnifierLens PointerPositionX must be between 0.0 and 1.0.")
 		if this.PointerPositionY < 0 || this.PointerPositionY > 1
@@ -131,24 +152,18 @@ class MagnifierLensPlugin {
 	}
 
 	static CreateWindow() {
+		renderGeometry := this.GetRenderGeometry()
+		borderWidth := this.BorderWidth
+		outerWidth := renderGeometry.LensWidth + 2 * borderWidth
+		outerHeight := renderGeometry.LensHeight + 2 * borderWidth
+
 		this.Gui := Gui(
 			"+AlwaysOnTop -Caption +ToolWindow -DPIScale +E0x08080020 +0x02000000"
 		)
+		this.Gui.BackColor := this.BorderColor
 		this.Gui.Show(
-			"Hide x0 y0 w" Round(this.LensWidth) " h" Round(this.LensHeight)
+			"Hide x0 y0 w" outerWidth " h" outerHeight
 		)
-
-		clientRect := Buffer(16, 0)
-		if !DllCall(
-			"user32\GetClientRect",
-			"Ptr", this.Gui.Hwnd,
-			"Ptr", clientRect.Ptr,
-			"Int"
-		)
-			throw OSError()
-
-		clientWidth := NumGet(clientRect, 8, "Int")
-		clientHeight := NumGet(clientRect, 12, "Int")
 
 		if !DllCall(
 			"user32\SetLayeredWindowAttributes",
@@ -167,10 +182,10 @@ class MagnifierLensPlugin {
 			"WStr", "Magnifier",
 			"WStr", "SmartInputVisuals MagnifierLens",
 			"UInt", 0x40000000 | 0x10000000, ; WS_CHILD | WS_VISIBLE
-			"Int", 0,
-			"Int", 0,
-			"Int", clientWidth,
-			"Int", clientHeight,
+			"Int", borderWidth,
+			"Int", borderWidth,
+			"Int", renderGeometry.LensWidth,
+			"Int", renderGeometry.LensHeight,
 			"Ptr", this.Gui.Hwnd,
 			"Ptr", 0,
 			"Ptr", instance,
@@ -254,19 +269,23 @@ class MagnifierLensPlugin {
 		renderGeometry := this.GetRenderGeometry()
 		lensWidth := renderGeometry.LensWidth
 		lensHeight := renderGeometry.LensHeight
+		borderWidth := this.BorderWidth
+		outerWidth := lensWidth + 2 * borderWidth
+		outerHeight := lensHeight + 2 * borderWidth
 
-		virtualLeft := DllCall("user32\GetSystemMetrics", "Int", 76, "Int")
-		virtualTop := DllCall("user32\GetSystemMetrics", "Int", 77, "Int")
-		virtualWidth := DllCall("user32\GetSystemMetrics", "Int", 78, "Int")
-		virtualHeight := DllCall("user32\GetSystemMetrics", "Int", 79, "Int")
-		virtualRight := virtualLeft + virtualWidth
-		virtualBottom := virtualTop + virtualHeight
+		if !this.MonitorBounds
+			this.MonitorBounds := SmartMonitorGeometry.GetBoundsAtPoint(mouseX, mouseY)
+
+		monitorLeft := this.MonitorBounds.Left
+		monitorTop := this.MonitorBounds.Top
+		monitorRight := this.MonitorBounds.Right
+		monitorBottom := this.MonitorBounds.Bottom
 
 		if !this.Visible {
-			desiredHostX := Round(mouseX - lensWidth * this.PointerPositionX)
-			desiredHostY := Round(mouseY - lensHeight * this.PointerPositionY)
-			hostX := this.Clamp(desiredHostX, virtualLeft, virtualRight - lensWidth)
-			hostY := this.Clamp(desiredHostY, virtualTop, virtualBottom - lensHeight)
+			desiredHostX := Round(mouseX - borderWidth - lensWidth * this.PointerPositionX)
+			desiredHostY := Round(mouseY - borderWidth - lensHeight * this.PointerPositionY)
+			hostX := this.Clamp(desiredHostX, monitorLeft, monitorRight - outerWidth)
+			hostY := this.Clamp(desiredHostY, monitorTop, monitorBottom - outerHeight)
 			this.FollowXDirection := 0
 			this.FollowYDirection := 0
 		}
@@ -274,17 +293,17 @@ class MagnifierLensPlugin {
 			xFollow := this.CalculateAxisFollow(
 				mouseX,
 				this.LastHostX,
-				lensWidth * this.PointerPositionX,
-				virtualLeft,
-				virtualRight - lensWidth,
+				borderWidth + lensWidth * this.PointerPositionX,
+				monitorLeft,
+				monitorRight - outerWidth,
 				this.FollowXDirection
 			)
 			yFollow := this.CalculateAxisFollow(
 				mouseY,
 				this.LastHostY,
-				lensHeight * this.PointerPositionY,
-				virtualTop,
-				virtualBottom - lensHeight,
+				borderWidth + lensHeight * this.PointerPositionY,
+				monitorTop,
+				monitorBottom - outerHeight,
 				this.FollowYDirection
 			)
 
@@ -294,21 +313,21 @@ class MagnifierLensPlugin {
 			this.FollowYDirection := yFollow.Direction
 		}
 
-		pointerOutputX := mouseX - hostX
-		pointerOutputY := mouseY - hostY
+		pointerOutputX := mouseX - (hostX + borderWidth)
+		pointerOutputY := mouseY - (hostY + borderWidth)
 		sourceWidth := renderGeometry.SourceWidth
 		sourceHeight := renderGeometry.SourceHeight
 		desiredSourceLeft := Round(mouseX - pointerOutputX / renderGeometry.ScaleX)
 		desiredSourceTop := Round(mouseY - pointerOutputY / renderGeometry.ScaleY)
 		sourceLeft := this.Clamp(
 			desiredSourceLeft,
-			virtualLeft,
-			virtualRight - sourceWidth
+			monitorLeft,
+			monitorRight - sourceWidth
 		)
 		sourceTop := this.Clamp(
 			desiredSourceTop,
-			virtualTop,
-			virtualBottom - sourceHeight
+			monitorTop,
+			monitorBottom - sourceHeight
 		)
 
 		return {
@@ -405,6 +424,7 @@ class MagnifierLensPlugin {
 		this.LastRefreshTick := 0
 		this.FollowXDirection := 0
 		this.FollowYDirection := 0
+		this.MonitorBounds := 0
 	}
 
 	static Shutdown() {

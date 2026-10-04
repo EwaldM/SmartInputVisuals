@@ -75,6 +75,7 @@ SmartInputVisuals/
 │  ├─ GDIPlusHost.ahk
 │  ├─ InputActivity.ahk
 │  ├─ InputState.ahk
+│  ├─ MonitorGeometry.ahk
 │  ├─ OverlayRegistry.ahk
 │  ├─ PluginDefinition.ahk
 │  ├─ PluginManager.ahk

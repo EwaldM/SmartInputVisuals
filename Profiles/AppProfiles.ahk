@@ -9,10 +9,10 @@
 ; names and window classes are matched case-insensitively. A class-specific match
 ; takes precedence over a process-only match for the same executable.
 ;
-; Plugin availability and baseline states are defined in Default.ahk. PluginDefinitions
-; is the availability whitelist. Every profile uses the same PluginStates structure.
-; A missing Default state means OFF. Application states for names outside the whitelist
-; remain inert, and omitted application states inherit the corresponding Default state.
+; Plugin metadata and baseline states are defined in Default.ahk. Every profile uses
+; the same PluginStates structure: Default contains a complete baseline Map, while
+; application profiles may contain only the true/false states they want to override.
+; Omitted plugin names inherit the corresponding state from Default.
 ;
 ; Keep application-specific configuration here rather than in the plugins so
 ; visual plugins remain reusable and profile selection stays centralised.
@@ -32,21 +32,22 @@ class DesktopProfile {
 	static Name := "Desktop"
 	static Applications := [
 		Map("Process", "explorer.exe", "Class", "Progman"),
+		Map("Process", "explorer.exe", "Class", "CabinetWClass"),
 		Map("Process", "explorer.exe", "Class", "WorkerW")
 	]
 	static PluginStates := Map(
 		"KeyPressOSD", false,
 		"PointerHalo", false,
-		"ClickRipples", false,
+		"ClickRipples", true,
 		"DragIndicator", false,
 		"MagnifierLens", false
 	)
 }
 
-class PowerPointProfile {
-	static Enabled := false
-	static Name := "PowerPoint"
-	static Applications := ["powerpnt.exe"]
+class EnterpriseArchitectProfile {
+;	static Enabled := false
+	static Name := "Enterprise Architect"
+	static Applications := ["EA.exe"]
 	static PluginStates := Map(
 		"KeyPressOSD", true,
 		"PointerHalo", true,
@@ -56,19 +57,19 @@ class PowerPointProfile {
 	)
 }
 
-class ExcelAndWordProfile {
-	static Enabled := false
-	static Name := "Excel and Word"
-	static Applications := ["excel.exe", "winword.exe"]
+class LemonTreeProfile {
+;	static Enabled := false
+	static Name := "LemonTree"
+	static Applications := ["LemonTree.exe"]
 	static PluginStates := Map(
-		"KeyPressOSD", true,
+		"KeyPressOSD", false,
 		"PointerHalo", true,
 		"ClickRipples", true,
 		"DragIndicator", false,
-		"MagnifierLens", false
+		"MagnifierLens", true
 	)
 }
 
 SmartProfileManager.Register(DesktopProfile)
-SmartProfileManager.Register(PowerPointProfile)
-SmartProfileManager.Register(ExcelAndWordProfile)
+SmartProfileManager.Register(EnterpriseArchitectProfile)
+SmartProfileManager.Register(LemonTreeProfile)

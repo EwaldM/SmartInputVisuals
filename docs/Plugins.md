@@ -101,6 +101,8 @@ DragIndicator normally uses one layered backing DIB. During the brief overlap be
 static Magnification := 2.0
 static LensWidth := 400
 static LensHeight := 600
+static BorderWidth := 1
+static BorderColor := 0xFFFFFF
 static PointerPositionX := 0.25
 static PointerPositionY := 0.15
 static FollowStartDistance := 20
@@ -109,7 +111,11 @@ static MinFollowMove := 4
 static UpdateInterval := 33
 ```
 
-`PointerPositionX` and `PointerPositionY` use normalised values from `0.0` to `1.0`; `0.5 / 0.5` centres the preferred pointer position in the lens. The default `0.25 / 0.15` defines an anchor 25% from the left edge and 15% from the top edge. The lens remains stationary while the pointer moves inside a dead zone around that anchor. Per-axis hysteresis starts following when the pointer is at least `FollowStartDistance` (20 px) from the anchor and stops only after the pointer returns within `FollowStopDistance` (12 px). While following, the lens moves only far enough to keep the pointer near the start-distance boundary rather than re-centring it on every update. Corrections smaller than `MinFollowMove` (4 px) are ignored, reducing small window-position changes and visible jitter. Lens dimensions and follow distances are physical screen pixels. The host GUI disables AutoHotkey DPI scaling so its client area and the native magnifier child use the same physical-pixel dimensions. Near virtual-desktop edges the lens is kept on-screen and the source rectangle is adjusted accordingly. The system pointer remains normal-sized rather than being magnified.
+`LensWidth` and `LensHeight` define the magnified content area. `BorderWidth` adds an outer border without reducing that content area; the default is 1 px and a value of `0` disables the border. `BorderColor` is a `0xRRGGBB` RGB value. The complete lens window therefore measures `LensWidth + 2 * BorderWidth` by `LensHeight + 2 * BorderWidth`.
+
+`PointerPositionX` and `PointerPositionY` use normalised values from `0.0` to `1.0`; `0.5 / 0.5` centres the preferred pointer position in the magnified content area. The default `0.25 / 0.15` defines an anchor 25% from the left edge and 15% from the top edge. The lens remains stationary while the pointer moves inside a dead zone around that anchor. Per-axis hysteresis starts following when the pointer is at least `FollowStartDistance` (20 px) from the anchor and stops only after the pointer returns within `FollowStopDistance` (12 px). While following, the lens moves only far enough to keep the pointer near the start-distance boundary rather than re-centring it on every update. Corrections smaller than `MinFollowMove` (4 px) are ignored, reducing small window-position changes and visible jitter. Lens dimensions, border width and follow distances are physical screen pixels. The host GUI disables AutoHotkey DPI scaling so its client area and the native magnifier child use the same physical-pixel dimensions. The system pointer remains normal-sized rather than being magnified.
+
+When the lens becomes active, it latches the physical monitor containing the pointer. The complete lens window, including its border, remains inside that monitor, and the magnification source rectangle is independently confined to the same monitor. While the lens remains active, moving the pointer onto another monitor keeps the lens at the relevant edge of the latched monitor and continues to magnify only pixels from that monitor. When the pointer returns, normal anchor-based following resumes immediately. The monitor latch is cleared when the lens is deactivated.
 
 The default magnification is the integer factor `2.0`, which maps source pixels more cleanly to output pixels and generally keeps rasterised text crisper than fractional factors. Fractional values remain supported: the source rectangle is rounded to whole desktop pixels and the transform is adjusted minimally per axis so that it fills the configured lens without a partial-pixel edge mismatch.
 
@@ -117,5 +123,5 @@ The default magnification is the integer factor `2.0`, which maps source pixels 
 
 `Core/OverlayRegistry.ahk` tracks SmartInputVisuals' top-level overlay windows. `MagnifierLens` supplies that list to the Windows magnifier filter so `KeyPressOSD`, `PointerHalo`, `ClickRipples`, `DragIndicator`, the plugin toolbar and the lens host itself are excluded from the magnified source. Existing visual indicators and host controls therefore remain crisp above the lens instead of appearing a second time inside it. The filter list is refreshed only when the registered overlay-window set changes.
 
-The lens uses the shared host timer and refreshes at most every `UpdateInterval` milliseconds; it does not create a separate polling timer. It is hidden immediately when profile, application scope, display scope, typing suppression, tray-surface suppression or the global `Enabled` switch makes the plugin ineligible.
+The lens uses the shared host timer and refreshes at most every `UpdateInterval` milliseconds; it does not create a separate polling timer. Profile, application scope, display scope, typing suppression, SmartInputVisuals host-surface suppression and the global `Enabled` switch use the normal plugin eligibility lifecycle. While an already active lens is over the Windows taskbar or notification area on its latched monitor, `KeepActiveWhenBlocked("TraySurface", state)` keeps the lens active and visible; the normal taskbar suppression still applies before lens activation and on taskbar surfaces outside the latched monitor.
 
