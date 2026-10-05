@@ -12,17 +12,17 @@ class SmartDefaultProfile {
 	; and RGB colours. Dragging changes the position only for the current session;
 	; this file is never rewritten.
 	static Toolbar := {
-		X: 400,
-		Y: 50,
+		X: 20,
+		Y: 20,
 		Opacity: 170,
 		ShowProfileName: true,
-		Layout: "V",
+		Layout: "H",
 		ButtonHeight: 44,
 		ButtonPaddingX: 14,
 		ButtonSpacing: 6,
-		BackgroundColor: 0xFFFF9B,
-		ButtonColor: 0x00FAFA,
-		TextColor: 0x0000FF
+		BackgroundColor: 0x202020,
+		ButtonColor: 0x404040,
+		TextColor: 0xFFFFFF
 	}
 
 	static PluginDefinitions := Map(
@@ -36,7 +36,7 @@ class SmartDefaultProfile {
 	static PluginStates := Map(
 		"KeyPressOSD", false,
 		"PointerHalo", false,
-		"ClickRipples", false,
+		"ClickRipples", true,
 		"DragIndicator", false,
 		"MagnifierLens", false
 	)

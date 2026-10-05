@@ -29,6 +29,9 @@ class SmartPluginToolbar {
 	static Visible := false
 	static LastProfileKey := ""
 	static LastPluginStates := Map()
+	static TitleClickTime := 0
+	static TitleClickX := 0
+	static TitleClickY := 0
 	static TitleMouseDownCallback := 0
 	static ExitSizeMoveCallback := 0
 	static DrawItemCallback := 0
@@ -54,6 +57,8 @@ class SmartPluginToolbar {
 		this.TitleMouseDownCallback := ObjBindMethod(this, "HandleTitleMouseDown")
 		this.ExitSizeMoveCallback := ObjBindMethod(this, "HandleExitSizeMove")
 		OnMessage(0x0201, this.TitleMouseDownCallback) ; WM_LBUTTONDOWN
+		OnMessage(0x0203, this.TitleMouseDownCallback) ; WM_LBUTTONDBLCLK
+		OnMessage(0x0216, this.ExitSizeMoveCallback) ; WM_MOVING clears click candidate
 		OnMessage(0x0232, this.ExitSizeMoveCallback) ; WM_EXITSIZEMOVE
 
 		this.Initialised := true
@@ -558,6 +563,7 @@ class SmartPluginToolbar {
 		if !this.Initialised || !this.Visible
 			return
 
+		this.TitleClickTime := 0
 		this.Gui.Hide()
 		this.Visible := false
 	}
@@ -569,8 +575,29 @@ class SmartPluginToolbar {
 	static HandleTitleMouseDown(wParam, lParam, msg, hwnd) {
 		if !this.Initialised || !this.Visible || !this.TitleControl
 			return
-		if hwnd != this.TitleControl.Hwnd
+		if hwnd != this.TitleControl.Hwnd {
+			this.TitleClickTime := 0
 			return
+		}
+
+		; The native move loop can consume the first button release. Recognise
+		; the second press using Windows' time and distance settings, whether
+		; it arrives as WM_LBUTTONDOWN or WM_LBUTTONDBLCLK.
+		position := DllCall("user32\GetMessagePos", "UInt")
+		x := (position & 0xFFFF) << 48 >> 48
+		y := ((position >> 16) & 0xFFFF) << 48 >> 48
+		now := DllCall("kernel32\GetTickCount64", "UInt64")
+		if this.TitleClickTime
+			&& now - this.TitleClickTime <= DllCall("user32\GetDoubleClickTime", "UInt")
+			&& Abs(x - this.TitleClickX) * 2 < DllCall("user32\GetSystemMetrics", "Int", 36, "Int")
+			&& Abs(y - this.TitleClickY) * 2 < DllCall("user32\GetSystemMetrics", "Int", 37, "Int") {
+			this.TitleClickTime := 0
+			SmartTrayController.ToggleToolbar()
+			return 0
+		}
+		this.TitleClickTime := now
+		this.TitleClickX := x
+		this.TitleClickY := y
 
 		DllCall("user32\ReleaseCapture")
 		DllCall(
@@ -588,11 +615,15 @@ class SmartPluginToolbar {
 		if !this.Initialised || !this.Gui || hwnd != this.Gui.Hwnd
 			return
 
+		if msg = 0x0216 { ; WM_MOVING: a drag must not become a double-click.
+			this.TitleClickTime := 0
+			return
+		}
 		this.ClampCurrentPosition()
 	}
 
 	static PreventClose(*) {
-		; Toolbar visibility is controlled exclusively by the tray-menu item.
+		; Hide through the title double-click or tray-menu item instead of closing.
 		return true
 	}
 
@@ -669,10 +700,14 @@ class SmartPluginToolbar {
 		if !this.Initialised
 			return
 
-		if this.TitleMouseDownCallback
+		if this.TitleMouseDownCallback {
 			OnMessage(0x0201, this.TitleMouseDownCallback, 0)
-		if this.ExitSizeMoveCallback
+			OnMessage(0x0203, this.TitleMouseDownCallback, 0)
+		}
+		if this.ExitSizeMoveCallback {
+			OnMessage(0x0216, this.ExitSizeMoveCallback, 0)
 			OnMessage(0x0232, this.ExitSizeMoveCallback, 0)
+		}
 		if this.DrawItemCallback
 			OnMessage(0x002B, this.DrawItemCallback, 0)
 
@@ -695,6 +730,7 @@ class SmartPluginToolbar {
 		this.LastPluginStates.Clear()
 		this.TargetProfile := 0
 		this.DrawItemCallback := 0
+		this.TitleClickTime := 0
 		this.Visible := false
 		this.Initialised := false
 	}

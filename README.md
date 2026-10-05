@@ -41,6 +41,8 @@ To start it with Windows, place a shortcut to `SmartInputVisuals.ahk` in the Sta
 
 The application name used by the tray tooltip and `Exit ...` command is configured once in `SmartInputVisuals.ahk` with `APP_NAME := "SmartInputVisuals"`.
 
+The tray icon is loaded at startup from `Resources/SmartInputVisuals.ico`. Keep this file with the application; it contains transparent icon variants at 16, 24, 32, 48, 64, 128 and 256 px.
+
 ## Documentation
 
 - [Configuration](docs/Configuration.md) — profiles, plugin availability/state, toolbar, application scope and runtime controls.
@@ -83,6 +85,8 @@ SmartInputVisuals/
 │  ├─ ProfileManager.ahk
 │  ├─ SharedTheme.ahk
 │  └─ TrayController.ahk
+├─ Resources/
+│  └─ SmartInputVisuals.ico
 ├─ Profiles/
 │  ├─ Default.ahk
 │  └─ AppProfiles.ahk

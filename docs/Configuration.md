@@ -162,14 +162,14 @@ Application profiles use the **same `PluginStates` structure** as the Default pr
 Example:
 
 ```ahk
-class PowerPointProfile {
+class PPTProfile {
     static Enabled := false
     static Name := "PowerPoint"
-    static Applications := ["POWERPNT.EXE"]
+    static Applications := ["powerpnt.exe"]
     static PluginStates := Map(
         "KeyPressOSD", true,
         "PointerHalo", true,
-        "ClickRipples", true,
+        "ClickRipples", false,
         "DragIndicator", true,
         "MagnifierLens", false
     )
@@ -193,7 +193,7 @@ class DesktopProfile {
     static PluginStates := Map(
         "KeyPressOSD", false,
         "PointerHalo", false,
-        "ClickRipples", false,
+        "ClickRipples", true,
         "DragIndicator", false,
         "MagnifierLens", false
     )
@@ -202,7 +202,7 @@ class DesktopProfile {
 SmartProfileManager.Register(DesktopProfile)
 ```
 
-With no separate process-only `explorer.exe` profile, ordinary File Explorer windows continue to use the Default profile. In this Desktop example every plugin is explicitly set to `false`.
+The supplied Desktop profile is enabled and enables only `ClickRipples`. The enabled `ExplorerProfile` matches `explorer.exe` windows with class `CabinetWClass` and explicitly disables all five plugins. The disabled `OfficeProfile` covers `excel.exe`, `winword.exe` and `outlook.exe`, with `KeyPressOSD`, `PointerHalo` and `ClickRipples` enabled in its configured states. The disabled `PPTProfile` covers PowerPoint, with `KeyPressOSD`, `PointerHalo` and `DragIndicator` enabled in its configured states.
 
 Useful `explorer.exe` window classes for profile matching:
 
@@ -220,7 +220,7 @@ Taskbar classes are normally handled by SmartInputVisuals' built-in tray/taskbar
 
 `Core/PluginToolbar.ahk` provides a compact always-on-top toolbar. It is built from the **available** registered plugins, so buttons appear in plugin registration order and use each plugin's `DisplayName`. Registered plugins which are outside the `PluginDefinitions` whitelist, or which are unhealthy, are not shown on the toolbar.
 
-The toolbar title is left-aligned above the buttons. By default it shows the current profile name; `ShowProfileName: false` switches it to the SmartInputVisuals application name. `Layout: "H"` places the buttons in the current horizontal row. `Layout: "V"` places them in a vertical column with one common width based on the longest button caption, which is more suitable for longer display names. The title uses the width established by the buttons and is truncated with an ellipsis when necessary rather than widening the toolbar. The entire title region remains the drag handle; the button area itself does not drag the window. The toolbar has no close button. Its visibility is controlled only by the single `Toolbar` item in the tray menu, which is checked while the toolbar is visible. The toolbar starts visible by default.
+The toolbar title is left-aligned above the buttons. By default it shows the current profile name; `ShowProfileName: false` switches it to the SmartInputVisuals application name. `Layout: "H"` places the buttons in the current horizontal row. `Layout: "V"` places them in a vertical column with one common width based on the longest button caption, which is more suitable for longer display names. The title uses the width established by the buttons and is truncated with an ellipsis when necessary rather than widening the toolbar. The entire title region remains the drag handle; the button area itself does not drag the window. Double-clicking the title hides the toolbar and clears the tray menu’s `Toolbar` check mark. Select `Toolbar` in the tray menu to show it again. Title dragging continues to move the toolbar normally. The toolbar has no close button and starts visible by default.
 
 Button captions intentionally use a compact textual state:
 

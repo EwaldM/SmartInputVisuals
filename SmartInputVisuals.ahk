@@ -40,6 +40,7 @@ CoordMode("Mouse", "Screen")
 CoordMode("ToolTip", "Screen")
 
 APP_NAME := "SmartInputVisuals"
+TraySetIcon(A_ScriptDir "\Resources\SmartInputVisuals.ico")
 APP_POLL_INTERVAL := 20
 ApplicationPaused := false
 AppState := SmartInputState()
