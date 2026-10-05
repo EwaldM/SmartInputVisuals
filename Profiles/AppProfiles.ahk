@@ -32,7 +32,6 @@ class DesktopProfile {
 	static Name := "Desktop"
 	static Applications := [
 		Map("Process", "explorer.exe", "Class", "Progman"),
-		Map("Process", "explorer.exe", "Class", "CabinetWClass"),
 		Map("Process", "explorer.exe", "Class", "WorkerW")
 	]
 	static PluginStates := Map(
@@ -44,32 +43,48 @@ class DesktopProfile {
 	)
 }
 
-class EnterpriseArchitectProfile {
-;	static Enabled := false
-	static Name := "Enterprise Architect"
-	static Applications := ["EA.exe"]
+class ExplorerProfile {
+	; static Enabled := false
+	static Name := "Explorer"
+	static Applications := [
+		Map("Process", "explorer.exe", "Class", "CabinetWClass")
+	]
+	static PluginStates := Map(
+		"KeyPressOSD", false,
+		"PointerHalo", false,
+		"ClickRipples", false,
+		"DragIndicator", false,
+		"MagnifierLens", false
+	)
+}
+
+class PPTProfile {
+	static Enabled := false
+	static Name := "PowerPoint"
+	static Applications := ["powerpnt.exe"]
 	static PluginStates := Map(
 		"KeyPressOSD", true,
 		"PointerHalo", true,
-		"ClickRipples", true,
+		"ClickRipples", false,
 		"DragIndicator", true,
 		"MagnifierLens", false
 	)
 }
 
-class LemonTreeProfile {
-;	static Enabled := false
-	static Name := "LemonTree"
-	static Applications := ["LemonTree.exe"]
+class OfficeProfile {
+	static Enabled := false
+	static Name := "Excel and Word"
+	static Applications := ["excel.exe", "winword.exe", "outlook.exe"]
 	static PluginStates := Map(
-		"KeyPressOSD", false,
+		"KeyPressOSD", true,
 		"PointerHalo", true,
 		"ClickRipples", true,
 		"DragIndicator", false,
-		"MagnifierLens", true
+		"MagnifierLens", false
 	)
 }
 
 SmartProfileManager.Register(DesktopProfile)
-SmartProfileManager.Register(EnterpriseArchitectProfile)
-SmartProfileManager.Register(LemonTreeProfile)
+SmartProfileManager.Register(ExplorerProfile)
+SmartProfileManager.Register(PPTProfile)
+SmartProfileManager.Register(OfficeProfile)
