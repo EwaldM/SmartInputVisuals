@@ -58,19 +58,6 @@ class ExplorerProfile {
 	)
 }
 
-class PPTProfile {
-	static Enabled := false
-	static Name := "PowerPoint"
-	static Applications := ["powerpnt.exe"]
-	static PluginStates := Map(
-		"KeyPressOSD", true,
-		"PointerHalo", true,
-		"ClickRipples", false,
-		"DragIndicator", true,
-		"MagnifierLens", false
-	)
-}
-
 class OfficeProfile {
 	static Enabled := false
 	static Name := "Excel and Word"
@@ -84,7 +71,20 @@ class OfficeProfile {
 	)
 }
 
+class PPTProfile {
+	static Enabled := false
+	static Name := "PowerPoint"
+	static Applications := ["powerpnt.exe"]
+	static PluginStates := Map(
+		"KeyPressOSD", true,
+		"PointerHalo", true,
+		"ClickRipples", false,
+		"DragIndicator", true,
+		"MagnifierLens", false
+	)
+}
+
 SmartProfileManager.Register(DesktopProfile)
 SmartProfileManager.Register(ExplorerProfile)
-SmartProfileManager.Register(PPTProfile)
 SmartProfileManager.Register(OfficeProfile)
+SmartProfileManager.Register(PPTProfile)
