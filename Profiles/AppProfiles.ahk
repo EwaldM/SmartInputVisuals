@@ -60,7 +60,7 @@ class ExplorerProfile {
 
 class OfficeProfile {
 	static Enabled := false
-	static Name := "Excel and Word"
+	static Name := "MS Office"
 	static Applications := ["excel.exe", "winword.exe", "outlook.exe"]
 	static PluginStates := Map(
 		"KeyPressOSD", true,
