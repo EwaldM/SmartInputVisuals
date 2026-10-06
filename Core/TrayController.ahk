@@ -20,6 +20,7 @@ class SmartTrayController {
 	static PauseCallback := 0
 	static ProfileMenuCallback := 0
 	static ToolbarMenuCallback := 0
+	static TrayIconCallback := 0
 	static EnabledMenuCallback := 0
 	static ExitCallback := 0
 	static HideFeedbackCallback := 0
@@ -61,6 +62,9 @@ class SmartTrayController {
 		A_TrayMenu.Add()
 		A_TrayMenu.Add(this.ExitItem, this.ExitCallback)
 		A_IconTip := this.AppName
+
+		this.TrayIconCallback := ObjBindMethod(this, "HandleTrayIcon")
+		OnMessage(0x0404, this.TrayIconCallback) ; AHK_NOTIFYICON
 
 		this.Refresh(true)
 		this.RefreshToolbar()
@@ -153,6 +157,20 @@ class SmartTrayController {
 
 		this.Refresh(true)
 		this.ShowFeedback(pluginName, enabled)
+	}
+
+	static HandleTrayIcon(wParam, lParam, msg, hwnd) {
+		if !this.Initialised || hwnd != A_ScriptHwnd
+			return
+		if (lParam & 0xFFFF) != 0x0203 ; WM_LBUTTONDBLCLK
+			return
+
+		if SmartPluginToolbar.Initialised {
+			SmartPluginToolbar.Show()
+			this.RefreshToolbar()
+		}
+		; Consume the double-click so AutoHotkey does not run its default action.
+		return 0
 	}
 
 	static ToggleToolbar(*) {
@@ -293,6 +311,9 @@ class SmartTrayController {
 		if !this.Initialised
 			return
 
+		if this.TrayIconCallback
+			OnMessage(0x0404, this.TrayIconCallback, 0)
+		this.TrayIconCallback := 0
 		if this.HideFeedbackCallback
 			SetTimer(this.HideFeedbackCallback, 0)
 		this.HideFeedback()

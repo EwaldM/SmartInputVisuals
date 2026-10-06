@@ -43,6 +43,21 @@ The application name used by the tray tooltip and `Exit ...` command is configur
 
 The tray icon is loaded at startup from `Resources/SmartInputVisuals.ico`. Keep this file with the application; it contains transparent icon variants at 16, 24, 32, 48, 64, 128 and 256 px.
 
+## Basic usage
+
+| Action | Result |
+|---|---|
+| Double-click the tray icon | Show the toolbar |
+| Double-click the toolbar title | Hide the toolbar |
+| Drag the toolbar title | Move the toolbar |
+| Click a toolbar plugin button | Toggle that plugin for the current profile |
+| Right-click the tray icon | Open the context menu |
+| Select a plugin in the tray menu | Toggle it for the profile shown at the top of the menu |
+| Select **Toolbar** | Show or hide the toolbar |
+| Toggle **Enabled** | Pause or resume all visualisations |
+
+Plugin toggles apply for the current session and reset when SmartInputVisuals restarts. See [Configuration](docs/Configuration.md) for details about profiles, plugin availability and runtime controls.
+
 ## Documentation
 
 - [Configuration](docs/Configuration.md) — profiles, plugin availability/state, toolbar, application scope and runtime controls.
